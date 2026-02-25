@@ -1,0 +1,10 @@
+{
+    "name": "velocity-core-root",
+    "version": "1.0.0",
+    "description": "Portefolio Velocity - Root Package",
+    "scripts": {
+        "dev": "./dev.sh"
+    },
+    "author": "",
+    "license": "ISC"
+}

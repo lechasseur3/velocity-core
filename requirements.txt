@@ -1,0 +1,9 @@
+numpy
+pandas
+yfinance
+scipy
+pypfopt
+plotly
+pandas-datareader
+statsmodels
+rich
