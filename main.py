@@ -28,6 +28,10 @@ class AnalysisRequest(BaseModel):
     views: List[BLView]
     is_auto: Optional[bool] = True
     manual_weights: Optional[dict] = None
+    cov_method: Optional[str] = "sample_cov"  # 'sample_cov' | 'ledoit_wolf' | 'oracle_approximating'
+    tau: Optional[float] = 0.05
+    min_weight: Optional[float] = 0.02
+    max_weight: Optional[float] = 0.25
 
 @app.post("/analyze")
 async def analyze(request: AnalysisRequest):
@@ -38,7 +42,11 @@ async def analyze(request: AnalysisRequest):
             request.symbols, 
             views_dict, 
             is_auto=request.is_auto, 
-            manual_weights=request.manual_weights
+            manual_weights=request.manual_weights,
+            cov_method=request.cov_method,
+            tau=request.tau,
+            min_weight=request.min_weight,
+            max_weight=request.max_weight
         )
         return result
     except Exception as e:
