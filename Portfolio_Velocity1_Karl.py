@@ -39,6 +39,7 @@ import scipy.stats as stats
 from pypfopt import BlackLittermanModel, risk_models, expected_returns
 from pypfopt.efficient_frontier import EfficientFrontier
 import concurrent.futures
+from engine import calculate_var_historical, calculate_var_cornish_fisher, calculate_cvar, walk_forward_backtest
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -504,28 +505,6 @@ def compute_risk_metrics(df, weights, S, perf, rf, symbols, debts):
     # ── CVaR / Expected Shortfall ────────────────────────────────────────────
     cvar = calculate_cvar(pf_ret, VAR_CONFIDENCE)
     
-    # ── Fonctions pour VaR avancées ────────────────────────────────────────
-    def calculate_var_historical(rp, confidence=0.99):
-        """VaR historique : utiliser la distribution historique des rendements"""
-        var_percentile = (1 - confidence) * 100
-        var_value = -np.percentile(rp, var_percentile)
-        return max(0, var_value)
-    
-    def calculate_var_cornish_fisher(rp, confidence=0.99):
-        """VaR Cornish-Fisher : ajustement pour skewness et kurtosis"""
-        z = stats.norm.ppf(confidence)
-        skewness = stats.skew(rp)
-        kurtosis = stats.kurtosis(rp)
-        z_cf = (z + (z**2 - 1) * skewness / 6 + (z**3 - 3*z) * kurtosis / 24 - (2*z**3 - 5*z) * skewness**2 / 36)
-        var_value = -(rp.mean() - z_cf * rp.std())
-        return max(0, var_value)
-    
-    def calculate_cvar(rp, confidence=0.99):
-        """CVaR / Expected Shortfall : E[P&L | P&L < VaR]"""
-        var_threshold = np.percentile(rp, (1 - confidence) * 100)
-        cvar_value = -rp[rp <= var_threshold].mean()
-        return max(0, cvar_value)
-
     # ── Max Drawdown ──────────────────────────────────────────────────────
     cumret = (1 + pf_ret).cumprod()
     max_dd = ((cumret - cumret.cummax()) / cumret.cummax()).min()
@@ -540,7 +519,6 @@ def compute_risk_metrics(df, weights, S, perf, rf, symbols, debts):
     
     # ── Walk-forward backtest ──────────────────────────────────────────────
     try:
-        from engine import walk_forward_backtest
         wf_backtest = walk_forward_backtest(
             df.pct_change().dropna(), 
             list(weights.keys()), 

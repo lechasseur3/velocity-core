@@ -24,11 +24,15 @@ def fetch_stock_data(ticker):
     
     try:
         info = stock.info
+        if not info or len(info) < 5:
+            raise ValueError(f"Yahoo Finance returned insufficient data for {ticker}")
         info_dict['mcap'] = info.get('marketCap', 1e9)
         info_dict['currency'] = info.get('currency', 'USD')
         
         # Fundamentals
         info_dict['price'] = info.get('currentPrice', info.get('regularMarketPrice', info.get('previousClose', 0)))
+        if info_dict['price'] == 0:
+            raise ValueError(f"No price data for {ticker}")
         info_dict['pe_ratio'] = info.get('trailingPE', info.get('forwardPE', None))
         
         # Yield (can come as 0.05 for 5% or None)
@@ -46,8 +50,10 @@ def fetch_stock_data(ticker):
             info_dict['total_debt'] = stock.balance_sheet.loc['Total Debt'].iloc[0]
         except: pass
         
-    except Exception:
-        pass
+    except ValueError as e:
+        raise ValueError(f"Data validation failed for {ticker}: {e}")
+    except Exception as e:
+        raise ValueError(f"Failed to fetch data for {ticker}: {e}")
         
     return info_dict
 
@@ -207,8 +213,8 @@ def walk_forward_backtest(returns_df, symbols, rf, start_date=None, train_days=2
             test_rp = (test_returns[symbols] * w_series).sum(axis=1)
             test_return = (1 + test_rp).prod() - 1
             test_volatility = test_rp.std() * np.sqrt(252)
-            test_sharpe = (test_return + 1) ** (252/len(test_rp)) - 1
-            test_sharpe = test_sharpe / test_volatility if test_volatility > 0 else 0
+            test_return_annualized = (1 + test_return) ** (252/len(test_rp)) - 1
+            test_sharpe = (test_return_annualized - rf) / test_volatility if test_volatility > 0 else 0
             
             # VaR
             test_var = -np.percentile(test_rp, 1)  # 99% VaR
