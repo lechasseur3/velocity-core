@@ -469,7 +469,18 @@ def compute_risk_metrics(df, weights, S, perf, rf, symbols, debts):
     rp_a, rm_a = aligned.iloc[:, 0], aligned.iloc[:, 1]
 
     beta  = np.cov(rp_a, rm_a)[0, 1] / np.var(rm_a)
-    alpha = perf[0] - (rf + beta * (rm_a.mean() * 252 - rf))
+    # Alpha de Jensen : utiliser le rendement du benchmark observé sur la période
+    try:
+        # Calcul du rendement annualisé du benchmark SPY sur la période
+        if len(bm) >= 2:
+            total_return = (bm.iloc[-1] / bm.iloc[0]) - 1
+            years = len(bm) / 252
+            market_return = (1 + total_return) ** (1/years) - 1 if years > 0 else 0.12
+        else:
+            market_return = 0.12
+    except:
+        market_return = 0.12
+    alpha = perf[0] - (rf + beta * (market_return - rf))
 
     # ── Contribution au risque ────────────────────────────────────────────
     mc       = S @ w
@@ -483,6 +494,37 @@ def compute_risk_metrics(df, weights, S, perf, rf, symbols, debts):
     var_1d    = max(0, INVESTMENT * (z * daily_vol - daily_ret))
     days_ax   = np.arange(1, VAR_HORIZON + 1)
     var_curve = var_1d * np.sqrt(days_ax)
+    
+    # ── VaR historique ─────────────────────────────────────────────────────
+    var_hist = calculate_var_historical(pf_ret, VAR_CONFIDENCE)
+    
+    # ── VaR Cornish-Fisher ──────────────────────────────────────────────────
+    var_cf = calculate_var_cornish_fisher(pf_ret, VAR_CONFIDENCE)
+    
+    # ── CVaR / Expected Shortfall ────────────────────────────────────────────
+    cvar = calculate_cvar(pf_ret, VAR_CONFIDENCE)
+    
+    # ── Fonctions pour VaR avancées ────────────────────────────────────────
+    def calculate_var_historical(rp, confidence=0.99):
+        """VaR historique : utiliser la distribution historique des rendements"""
+        var_percentile = (1 - confidence) * 100
+        var_value = -np.percentile(rp, var_percentile)
+        return max(0, var_value)
+    
+    def calculate_var_cornish_fisher(rp, confidence=0.99):
+        """VaR Cornish-Fisher : ajustement pour skewness et kurtosis"""
+        z = stats.norm.ppf(confidence)
+        skewness = stats.skew(rp)
+        kurtosis = stats.kurtosis(rp)
+        z_cf = (z + (z**2 - 1) * skewness / 6 + (z**3 - 3*z) * kurtosis / 24 - (2*z**3 - 5*z) * skewness**2 / 36)
+        var_value = -(rp.mean() - z_cf * rp.std())
+        return max(0, var_value)
+    
+    def calculate_cvar(rp, confidence=0.99):
+        """CVaR / Expected Shortfall : E[P&L | P&L < VaR]"""
+        var_threshold = np.percentile(rp, (1 - confidence) * 100)
+        cvar_value = -rp[rp <= var_threshold].mean()
+        return max(0, cvar_value)
 
     # ── Max Drawdown ──────────────────────────────────────────────────────
     cumret = (1 + pf_ret).cumprod()
@@ -495,6 +537,19 @@ def compute_risk_metrics(df, weights, S, perf, rf, symbols, debts):
         d_total  += wt * debts.get(t, 0)
         mc_total += wt * yf.Ticker(t).info.get('marketCap', 0)
     debt_ratio = (d_total / (d_total + mc_total) * 100) if (d_total + mc_total) > 0 else None
+    
+    # ── Walk-forward backtest ──────────────────────────────────────────────
+    try:
+        from engine import walk_forward_backtest
+        wf_backtest = walk_forward_backtest(
+            df.pct_change().dropna(), 
+            list(weights.keys()), 
+            rf,
+            train_days=252,
+            test_days=63
+        )
+    except:
+        wf_backtest = {"error": "Backtest non disponible"}
 
     return {
         'beta'      : beta,
@@ -506,6 +561,10 @@ def compute_risk_metrics(df, weights, S, perf, rf, symbols, debts):
         'max_dd'    : max_dd,
         'debt_ratio': debt_ratio,
         'pf_ret'    : pf_ret,
+        'var_historical': var_hist,
+        'var_cornish_fisher': var_cf,
+        'cvar': cvar,
+        'walk_forward_backtest': wf_backtest,
     }
 
 
@@ -541,6 +600,12 @@ def display_results(weights, perf, risk, symbols):
         f"{risk['var_curve'][-1]:,.0f} €/$",
         f"Sur {INVESTMENT:,} €/$ investis"
     )
+    
+    # Nouvelles métriques de risque
+    perf_table.add_row("VaR historique",           f"{risk.get('var_historical', 0):,.0f} €/$", "Distribution historique")
+    perf_table.add_row("VaR Cornish-Fisher",      f"{risk.get('var_cornish_fisher', 0):,.0f} €/$", "Ajustement skew/kurtosis")
+    perf_table.add_row("CVaR / Expected Shortfall", f"{risk.get('cvar', 0):,.0f} €/$", "Perte moyenne au-delà du VaR")
+    
     if risk['debt_ratio'] is not None:
         d = risk['debt_ratio']
         dl = "[green]Raisonnable[/green]" if d < 40 else ("[yellow]Modéré[/yellow]" if d < 60 else "[red]Élevé[/red]")
