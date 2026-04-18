@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import './App.css';
 
-const COLORS = ['#c9a84c', '#8b5cf6', '#22c55e', '#eab308', '#ef4444', '#f97316', '#ec4899', '#06b6d4', '#a855f7', '#84cc16'];
+const COLORS = ['#1b3a6b', '#7b5ea7', '#2d9f6f', '#d4a017', '#c0392b', '#e67e22', '#c44d5c', '#4a90d9', '#9b59b6', '#6b8e23'];
 
 interface AssetInfo {
   ticker: string;
@@ -160,7 +160,7 @@ export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const isLight = theme === 'light';
   const colors = isLight
-    ? ['#b8941f', '#7c3aed', '#16a34a', '#ca8a04', '#dc2626', '#ea580c', '#db2777', '#0891b2', '#9333ea', '#65a30d']
+    ? ['#1b3a6b', '#6a4c93', '#1f7a53', '#b8860b', '#a93226', '#c0701e', '#922b3e', '#2a5599', '#7d4e8c', '#4e7a1e']
     : COLORS;
   const tickerRef = useRef<HTMLDivElement>(null);
 
@@ -517,11 +517,11 @@ export default function App() {
             {/* KPI Cards */}
             <div className="vc-kpi-grid">
               {[
-                { label: 'Rendement Espéré', value: p.expected_return * 100, decimals: 2, suffix: '%', color: isLight ? '#16a34a' : '#22c55e', icon: '▸' },
-                { label: 'Volatilité', value: p.volatility * 100, decimals: 2, suffix: '%', color: isLight ? '#ca8a04' : '#eab308', icon: '◆' },
-                { label: 'Ratio de Sharpe', value: p.sharpe, decimals: 3, suffix: '', color: isLight ? '#b8941f' : '#c9a84c', icon: '⚡' },
-                { label: 'Beta', value: p.beta, decimals: 3, suffix: '', color: isLight ? '#7c3aed' : '#8b5cf6', icon: '●' },
-                { label: 'Alpha (Jensen)', value: p.alpha * 100, decimals: 2, suffix: '%', color: p.alpha >= 0 ? (isLight ? '#16a34a' : '#22c55e') : (isLight ? '#dc2626' : '#ef4444'), icon: '◈' },
+                { label: 'Rendement Espéré', value: p.expected_return * 100, decimals: 2, suffix: '%', color: isLight ? '#1f7a53' : '#2d9f6f', icon: '▸' },
+                { label: 'Volatilité', value: p.volatility * 100, decimals: 2, suffix: '%', color: isLight ? '#b8860b' : '#d4a017', icon: '◆' },
+                { label: 'Ratio de Sharpe', value: p.sharpe, decimals: 3, suffix: '', color: isLight ? '#1b3a6b' : '#4a90d9', icon: '⚡' },
+                { label: 'Beta', value: p.beta, decimals: 3, suffix: '', color: isLight ? '#6a4c93' : '#7b5ea7', icon: '●' },
+                { label: 'Alpha (Jensen)', value: p.alpha * 100, decimals: 2, suffix: '%', color: p.alpha >= 0 ? (isLight ? '#1f7a53' : '#2d9f6f') : (isLight ? '#a93226' : '#c0392b'), icon: '◈' },
               ].map(k => (
                 <div key={k.label} className="vc-kpi" style={{ '--vc-glow': k.color + '20' } as any}>
                   <span className="vc-kpi-icon">{k.icon}</span>
@@ -547,13 +547,13 @@ export default function App() {
                       <YAxis tick={{ fill: axisFill, fontSize: 10 }} />
                       <Tooltip contentStyle={chartTooltipStyle} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Brush dataKey="Date" height={30} stroke={isLight ? '#b8941f' : '#c9a84c'} fill={isLight ? 'rgba(184,148,31,0.05)' : 'rgba(201,168,76,0.05)'}
+                      <Brush dataKey="Date" height={30} stroke={isLight ? '#1b3a6b' : '#4a90d9'} fill={isLight ? 'rgba(184,148,31,0.05)' : 'rgba(201,168,76,0.05)'}
                         tickFormatter={(v: string) => v?.slice(0, 7)} />
                       {result.assets.map((a, i) => (
                         <Line key={a} type="monotone" dataKey={a} stroke={colors[i % colors.length]} strokeWidth={1} dot={false} strokeOpacity={0.35} />
                       ))}
-                      <Line type="monotone" dataKey="Portefeuille" stroke={isLight ? '#b8941f' : '#c9a84c'} strokeWidth={3} dot={false} />
-                      <Line type="monotone" dataKey="Benchmark" stroke={isLight ? '#4a4a6a' : '#94a3b8'} strokeWidth={2} strokeDasharray="8 4" dot={false} />
+                      <Line type="monotone" dataKey="Portefeuille" stroke={isLight ? '#1b3a6b' : '#4a90d9'} strokeWidth={3} dot={false} />
+                      <Line type="monotone" dataKey="Benchmark" stroke={isLight ? '#4a4a6a' : '#5c6478'} strokeWidth={2} strokeDasharray="8 4" dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -574,9 +574,9 @@ export default function App() {
                     <Tooltip contentStyle={chartTooltipStyle}
                       formatter={(value: any, name: any) => [Number(value).toFixed(2) + '%', name]} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Scatter data={efData} fill={isLight ? '#b8941f' : '#c9a84c'} name="Frontière" />
+                    <Scatter data={efData} fill={isLight ? '#1b3a6b' : '#4a90d9'} name="Frontière" />
                     {p && efData.length > 0 && (
-                      <Scatter data={[{ vol: p.volatility * 100, ret: p.expected_return * 100 }]} fill={isLight ? '#16a34a' : '#22c55e'} name="Portefeuille optimal" />
+                      <Scatter data={[{ vol: p.volatility * 100, ret: p.expected_return * 100 }]} fill={isLight ? '#1f7a53' : '#2d9f6f'} name="Portefeuille optimal" />
                     )}
                   </ScatterChart>
                 </ResponsiveContainer>
@@ -671,7 +671,7 @@ export default function App() {
                       <PolarGrid stroke={gridStroke} />
                       <PolarAngleAxis dataKey="factor" tick={{ fill: axisFill, fontSize: 11 }} />
                       <PolarRadiusAxis tick={{ fill: labelFill, fontSize: 9 }} />
-                      <Radar name="Exposition" dataKey="exposure" stroke={isLight ? '#b8941f' : '#c9a84c'} fill={isLight ? '#b8941f' : '#c9a84c'} fillOpacity={0.15} strokeWidth={2} />
+                      <Radar name="Exposition" dataKey="exposure" stroke={isLight ? '#1b3a6b' : '#4a90d9'} fill={isLight ? '#1b3a6b' : '#4a90d9'} fillOpacity={0.15} strokeWidth={2} />
                       <Tooltip contentStyle={chartTooltipStyle} />
                     </RadarChart>
                   </ResponsiveContainer>
@@ -771,11 +771,11 @@ export default function App() {
               <>
                 <div className="vc-kpi-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
                   {[
-                    { label: 'Rendement Moyen', value: result.walk_forward_backtest.summary.avg_return * 100, suffix: '%', color: isLight ? '#16a34a' : '#22c55e', icon: '▸' },
-                    { label: 'Volatilité Moyenne', value: result.walk_forward_backtest.summary.avg_volatility * 100, suffix: '%', color: isLight ? '#ca8a04' : '#eab308', icon: '◆' },
-                    { label: 'Sharpe Moyen', value: result.walk_forward_backtest.summary.avg_sharpe, suffix: '', color: isLight ? '#b8941f' : '#c9a84c', icon: '⚡' },
-                    { label: 'VaR 99% Moyen', value: result.walk_forward_backtest.summary.avg_var_99 * 100, suffix: '%', color: isLight ? '#dc2626' : '#ef4444', icon: '●' },
-                    { label: 'Max Drawdown', value: result.walk_forward_backtest.summary.max_drawdown * 100, suffix: '%', color: isLight ? '#dc2626' : '#ef4444', icon: '◈' },
+                    { label: 'Rendement Moyen', value: result.walk_forward_backtest.summary.avg_return * 100, suffix: '%', color: isLight ? '#1f7a53' : '#2d9f6f', icon: '▸' },
+                    { label: 'Volatilité Moyenne', value: result.walk_forward_backtest.summary.avg_volatility * 100, suffix: '%', color: isLight ? '#b8860b' : '#d4a017', icon: '◆' },
+                    { label: 'Sharpe Moyen', value: result.walk_forward_backtest.summary.avg_sharpe, suffix: '', color: isLight ? '#1b3a6b' : '#4a90d9', icon: '⚡' },
+                    { label: 'VaR 99% Moyen', value: result.walk_forward_backtest.summary.avg_var_99 * 100, suffix: '%', color: isLight ? '#a93226' : '#c0392b', icon: '●' },
+                    { label: 'Max Drawdown', value: result.walk_forward_backtest.summary.max_drawdown * 100, suffix: '%', color: isLight ? '#a93226' : '#c0392b', icon: '◈' },
                   ].map(s => (
                     <div key={s.label} className="vc-kpi" style={{ '--vc-glow': s.color + '20' } as any}>
                       <span className="vc-kpi-icon">{s.icon}</span>
@@ -803,7 +803,7 @@ export default function App() {
                           formatter={(v: any) => [Number(v).toFixed(2) + '%', 'Rendement']} />
                         <Bar dataKey="return" name="Rendement %" radius={[6, 6, 0, 0]}>
                           {wfResults.map((r: any, i: number) => (
-                            <Cell key={i} fill={r.return >= 0 ? (isLight ? '#16a34a' : '#22c55e') : (isLight ? '#dc2626' : '#ef4444')} />
+                            <Cell key={i} fill={r.return >= 0 ? (isLight ? '#1f7a53' : '#2d9f6f') : (isLight ? '#a93226' : '#c0392b')} />
                           ))}
                         </Bar>
                       </BarChart>

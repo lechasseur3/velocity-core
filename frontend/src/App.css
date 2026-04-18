@@ -4,84 +4,99 @@
 
 /* ── CSS Variables — DARK (default) ────────────────────── */
 :root {
-  --vc-bg-deep: #0b0f19;
-  --vc-bg-primary: #0b0f19;
-  --vc-bg-card: rgba(14, 19, 34, 0.94);
-  --vc-bg-card-hover: rgba(20, 27, 48, 0.97);
+  --vc-bg-deep: #0a0f1e;
+  --vc-bg-primary: #0a0f1e;
+  --vc-bg-card: rgba(12, 17, 38, 0.94);
+  --vc-bg-card-hover: rgba(18, 24, 48, 0.97);
   --vc-bg-input: rgba(255,255,255,0.03);
   --vc-border: rgba(255,255,255,0.06);
-  --vc-border-accent: rgba(201,168,76,0.3);
-  --vc-text-primary: #e8e8e8;
+  --vc-border-accent: rgba(120,80,160,0.35);
+  --vc-text-primary: #e8e8f0;
   --vc-text-secondary: #94a3b8;
-  --vc-text-muted: #64748b;
-  --vc-accent-gold: #c9a84c;
-  --vc-accent-gold-dim: rgba(201,168,76,0.15);
-  --vc-accent-gold-glow: rgba(201,168,76,0.08);
-  --vc-accent-cyan: #00d4ff;
-  --vc-accent-green: #22c55e;
-  --vc-accent-red: #ef4444;
-  --vc-accent-yellow: #eab308;
-  --vc-accent-purple: #8b5cf6;
-  --vc-sidebar-bg: #0b0f19;
-  --vc-sidebar-border: rgba(201,168,76,0.08);
-  --vc-risk-bg: rgba(180,30,30,0.06);
-  --vc-risk-border: rgba(180,30,30,0.12);
+  --vc-text-muted: #5c6478;
+  --vc-accent-gold: #8b1a2b;
+  --vc-accent-gold-dim: rgba(139,26,43,0.15);
+  --vc-accent-gold-glow: rgba(139,26,43,0.08);
+  --vc-accent-primary: #1b3a6b;
+  --vc-accent-primary-light: #2a5599;
+  --vc-accent-wine: #8b1a2b;
+  --vc-accent-wine-light: #a8233a;
+  --vc-accent-navy: #1b3a6b;
+  --vc-accent-navy-light: #2a5599;
+  --vc-accent-cyan: #4a90d9;
+  --vc-accent-green: #2d9f6f;
+  --vc-accent-red: #c0392b;
+  --vc-accent-yellow: #d4a017;
+  --vc-accent-purple: #7b5ea7;
+  --vc-gradient-main: linear-gradient(135deg, #1b3a6b 0%, #0d1f3c 100%);
+  --vc-gradient-wine: linear-gradient(135deg, #8b1a2b 0%, #5c1019 100%);
+  --vc-gradient-card: linear-gradient(145deg, rgba(27,58,107,0.06) 0%, rgba(139,26,43,0.04) 100%);
+  --vc-sidebar-bg: #080d1a;
+  --vc-sidebar-border: rgba(120,80,160,0.08);
+  --vc-risk-bg: rgba(139,26,43,0.08);
+  --vc-risk-border: rgba(139,26,43,0.15);
   --vc-risk-pos-bg: rgba(20,83,45,0.12);
-  --vc-risk-pos-border: rgba(34,197,94,0.15);
+  --vc-risk-pos-border: rgba(45,159,111,0.18);
   --vc-chip-bg: transparent;
-  --vc-chip-border: rgba(201,168,76,0.35);
-  --vc-chip-color: #c9a84c;
-  --vc-chip-hover-bg: rgba(201,168,76,0.05);
-  --vc-tooltip-bg: rgba(11,15,25,0.96);
-  --vc-tooltip-border: rgba(201,168,76,0.2);
-  --vc-tooltip-text: #e8e8e8;
-  --vc-grid-stroke: rgba(255,255,255,0.15);
+  --vc-chip-border: rgba(139,26,43,0.4);
+  --vc-chip-color: #c44d5c;
+  --vc-chip-hover-bg: rgba(139,26,43,0.06);
+  --vc-tooltip-bg: rgba(10,15,30,0.96);
+  --vc-tooltip-border: rgba(120,80,160,0.2);
+  --vc-tooltip-text: #e8e8f0;
+  --vc-grid-stroke: rgba(255,255,255,0.12);
   --vc-axis-fill: #64748b;
-  --vc-label-fill: #475569;
-  --vc-modal-bg: #0f1423;
-  --vc-corr-self-bg: rgba(201,168,76,0.12);
+  --vc-label-fill: #5c6478;
+  --vc-modal-bg: #0c1124;
+  --vc-corr-self-bg: rgba(139,26,43,0.12);
   --vc-weight-bar-bg: rgba(255,255,255,0.03);
-  --vc-separator: rgba(201,168,76,0.2);
+  --vc-separator: rgba(120,80,160,0.15);
   --vc-sidebar-width: 240px;
   --vc-transition: 150ms ease;
 }
 
 /* ── LIGHT MODE ─────────────────────────────────────────── */
 .vc-light {
-  --vc-bg-deep: #f5f5f0;
-  --vc-bg-primary: #f5f5f0;
+  --vc-bg-deep: #e8e9f0;
+  --vc-bg-primary: #eeeff5;
   --vc-bg-card: #ffffff;
   --vc-bg-card-hover: #ffffff;
   --vc-bg-input: rgba(0,0,0,0.04);
-  --vc-border: rgba(0,0,0,0.06);
-  --vc-border-accent: rgba(184,148,31,0.35);
+  --vc-border: rgba(27,58,107,0.08);
+  --vc-border-accent: rgba(139,26,43,0.3);
   --vc-text-primary: #1a1a2e;
   --vc-text-secondary: #4a4a6a;
   --vc-text-muted: #8a8aa0;
-  --vc-accent-gold: #b8941f;
-  --vc-accent-gold-dim: rgba(184,148,31,0.12);
-  --vc-accent-gold-glow: rgba(184,148,31,0.06);
-  --vc-accent-cyan: #0099cc;
+  --vc-accent-gold: #7a1525;
+  --vc-accent-gold-dim: rgba(139,26,43,0.1);
+  --vc-accent-gold-glow: rgba(139,26,43,0.05);
+  --vc-accent-primary: #1b3a6b;
+  --vc-accent-primary-light: #2a5599;
+  --vc-accent-wine: #7a1525;
+  --vc-accent-wine-light: #952535;
+  --vc-accent-navy: #1b3a6b;
+  --vc-accent-navy-light: #2a5599;
+  --vc-accent-cyan: #2a5599;
   --vc-sidebar-bg: #ffffff;
-  --vc-sidebar-border: rgba(0,0,0,0.06);
-  --vc-risk-bg: rgba(180,30,30,0.04);
-  --vc-risk-border: rgba(180,30,30,0.08);
-  --vc-risk-pos-bg: rgba(20,83,45,0.06);
-  --vc-risk-pos-border: rgba(34,197,94,0.12);
+  --vc-sidebar-border: rgba(27,58,107,0.08);
+  --vc-risk-bg: rgba(139,26,43,0.05);
+  --vc-risk-border: rgba(139,26,43,0.1);
+  --vc-risk-pos-bg: rgba(45,159,111,0.06);
+  --vc-risk-pos-border: rgba(45,159,111,0.12);
   --vc-chip-bg: transparent;
-  --vc-chip-border: rgba(184,148,31,0.35);
-  --vc-chip-color: #b8941f;
-  --vc-chip-hover-bg: rgba(184,148,31,0.05);
+  --vc-chip-border: rgba(139,26,43,0.35);
+  --vc-chip-color: #7a1525;
+  --vc-chip-hover-bg: rgba(139,26,43,0.05);
   --vc-tooltip-bg: rgba(255,255,255,0.98);
-  --vc-tooltip-border: rgba(0,0,0,0.1);
+  --vc-tooltip-border: rgba(27,58,107,0.12);
   --vc-tooltip-text: #1a1a2e;
-  --vc-grid-stroke: rgba(0,0,0,0.3);
+  --vc-grid-stroke: rgba(0,0,0,0.08);
   --vc-axis-fill: #4a4a6a;
   --vc-label-fill: #8a8aa0;
   --vc-modal-bg: #ffffff;
-  --vc-corr-self-bg: rgba(184,148,31,0.1);
+  --vc-corr-self-bg: rgba(139,26,43,0.08);
   --vc-weight-bar-bg: rgba(0,0,0,0.04);
-  --vc-separator: rgba(184,148,31,0.2);
+  --vc-separator: rgba(27,58,107,0.12);
 }
 
 /* ── Reset & Base ───────────────────────────────────────── */
@@ -173,7 +188,7 @@ body {
 .vc-nav-item.active {
   color: var(--vc-accent-gold);
   background: var(--vc-accent-gold-dim);
-  border-color: rgba(201,168,76,0.15);
+  border-color: rgba(168,35,58,0.15);
 }
 
 .vc-nav-item .nav-icon {
@@ -281,7 +296,7 @@ body {
 }
 
 .vc-card:hover {
-  border-color: rgba(201,168,76,0.12);
+  border-color: rgba(168,35,58,0.12);
 }
 
 .vc-light .vc-card:hover {
@@ -338,11 +353,11 @@ body {
 .vc-kpi:hover {
   transform: translateY(-3px);
   box-shadow: 0 8px 28px rgba(0,0,0,0.2), 0 0 16px var(--vc-glow, var(--vc-accent-gold-glow));
-  border-color: rgba(201,168,76,0.2);
+  border-color: rgba(168,35,58,0.2);
 }
 
 .vc-light .vc-kpi:hover {
-  box-shadow: 0 8px 24px rgba(0,0,0,0.06), 0 0 12px rgba(184,148,31,0.08);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06), 0 0 12px rgba(168,35,58,0.08);
 }
 
 .vc-kpi-icon {
@@ -495,19 +510,19 @@ body {
 
 .vc-field select:hover,
 .vc-field input:hover {
-  border-color: rgba(201,168,76,0.2);
+  border-color: rgba(168,35,58,0.2);
 }
 
 .vc-field select:focus,
 .vc-field input:focus {
   border-color: var(--vc-accent-gold);
-  box-shadow: 0 0 0 2px rgba(201,168,76,0.2);
+  box-shadow: 0 0 0 2px rgba(168,35,58,0.2);
 }
 
 .vc-light .vc-field select:focus,
 .vc-light .vc-field input:focus {
-  border-color: #b8941f;
-  box-shadow: 0 0 0 2px rgba(184,148,31,0.2);
+  border-color: var(--vc-accent-wine);
+  box-shadow: 0 0 0 2px rgba(168,35,58,0.2);
 }
 
 /* Custom range slider */
@@ -521,7 +536,7 @@ body {
   flex: 1;
   -webkit-appearance: none;
   height: 4px;
-  background: rgba(201,168,76,0.15);
+  background: rgba(168,35,58,0.15);
   border-radius: 2px;
   outline: none;
 }
@@ -532,7 +547,7 @@ body {
   background: var(--vc-accent-gold);
   border-radius: 50%;
   cursor: pointer;
-  box-shadow: 0 0 8px rgba(201,168,76,0.4);
+  box-shadow: 0 0 8px rgba(168,35,58,0.4);
 }
 
 .vc-range-value {
@@ -572,7 +587,7 @@ body {
 
 .vc-chip:hover {
   background: var(--vc-chip-hover-bg);
-  border-color: rgba(201,168,76,0.5);
+  border-color: rgba(168,35,58,0.5);
 }
 
 .vc-chip .chip-remove {
@@ -614,12 +629,12 @@ body {
 
 .vc-chip-input-row input:focus {
   border-color: var(--vc-accent-gold);
-  box-shadow: 0 0 0 2px rgba(201,168,76,0.2);
+  box-shadow: 0 0 0 2px rgba(168,35,58,0.2);
 }
 
 .vc-light .vc-chip-input-row input:focus {
-  border-color: #b8941f;
-  box-shadow: 0 0 0 2px rgba(184,148,31,0.2);
+  border-color: var(--vc-accent-wine);
+  box-shadow: 0 0 0 2px rgba(168,35,58,0.2);
 }
 
 .vc-chip-input-row input::placeholder {
@@ -641,7 +656,7 @@ body {
 
 .vc-chip-add-btn:hover {
   background: var(--vc-chip-hover-bg);
-  border-color: rgba(201,168,76,0.5);
+  border-color: rgba(168,35,58,0.5);
 }
 
 /* ── BL Views ───────────────────────────────────────────── */
@@ -678,7 +693,7 @@ body {
 .vc-views-row select:focus,
 .vc-views-row input:focus {
   border-color: var(--vc-accent-gold);
-  box-shadow: 0 0 0 2px rgba(201,168,76,0.2);
+  box-shadow: 0 0 0 2px rgba(168,35,58,0.2);
 }
 
 .vc-views-remove {
@@ -734,11 +749,11 @@ body {
 .vc-cta-primary {
   background: var(--vc-accent-gold);
   color: #1a1a2e;
-  box-shadow: 0 4px 16px rgba(201,168,76,0.25);
+  box-shadow: 0 4px 16px rgba(168,35,58,0.25);
 }
 
 .vc-cta-primary:hover:not(:disabled) {
-  box-shadow: 0 6px 24px rgba(201,168,76,0.35);
+  box-shadow: 0 6px 24px rgba(168,35,58,0.35);
   transform: translateY(-1px);
 }
 
@@ -788,7 +803,7 @@ body {
 
 .vc-region-btn:hover:not(.active) {
   color: var(--vc-text-secondary);
-  border-color: rgba(201,168,76,0.15);
+  border-color: rgba(168,35,58,0.15);
 }
 
 /* ── Ticker Strip ───────────────────────────────────────── */
@@ -1176,7 +1191,7 @@ body {
 .vc-export-btn:hover {
   background: var(--vc-accent-gold-glow);
   color: var(--vc-text-secondary);
-  border-color: rgba(201,168,76,0.15);
+  border-color: rgba(168,35,58,0.15);
 }
 
 /* ── Scroll Container for long charts ───────────────────── */
@@ -1195,7 +1210,7 @@ body {
 }
 
 .vc-chart-scroll::-webkit-scrollbar-thumb {
-  background: rgba(201,168,76,0.2);
+  background: rgba(168,35,58,0.2);
   border-radius: 3px;
 }
 
