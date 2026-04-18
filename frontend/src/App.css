@@ -1,1 +1,79 @@
-/* App-level overrides - all styling via Tailwind in index.css */
+/* Velocity Core — App Styles */
+
+/* Loader spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.loader-spinner {
+  width: 48px; height: 48px;
+  border: 3px solid rgba(0,212,255,0.15);
+  border-top-color: #00d4ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Skeleton pulse */
+@keyframes pulse-skel {
+  0%, 100% { opacity: 0.08; }
+  50% { opacity: 0.18; }
+}
+.skeleton-line {
+  height: 16px; border-radius: 6px;
+  background: rgba(0,212,255,0.12);
+  animation: pulse-skel 1.5s ease-in-out infinite;
+}
+
+/* KPI hover */
+.kpi-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.kpi-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 25px rgba(0,212,255,0.12);
+  border-color: rgba(0,212,255,0.25) !important;
+}
+
+/* Ticker scroll */
+.ticker-scroll {
+  animation: ticker-scroll 30s linear infinite;
+  display: flex; gap: 12px; width: max-content;
+}
+.ticker-scroll:hover { animation-play-state: paused; }
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Weight bar progressive reveal */
+@keyframes bar-reveal {
+  from { width: 0%; }
+}
+.weight-bar {
+  animation: bar-reveal 0.8s ease-out forwards;
+}
+
+/* Asset modal */
+.asset-modal-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+}
+.asset-modal {
+  background: #0f1423; border: 1px solid rgba(0,212,255,0.3);
+  border-radius: 16px; padding: 24px; min-width: 280px; max-width: 360px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+/* Print / PDF export */
+@media print {
+  body { background: white !important; color: black !important; }
+  .no-print { display: none !important; }
+  .kpi-card, .rounded-xl { break-inside: avoid; border: 1px solid #ddd !important; background: white !important; }
+  * { color: black !important; }
+}
+
+/* Responsive mobile */
+@media (max-width: 640px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .config-grid { grid-template-columns: 1fr !important; }
+  h1 { font-size: 1.5rem !important; }
+  .region-buttons { flex-wrap: wrap; }
+}
