@@ -349,9 +349,9 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
     
     # Covariance matrix with method selection
     if cov_method == 'ledoit_wolf':
-        S = LedoitWolf(df).ledoit_wolf()
+        S = CovarianceShrinkage(df).ledoit_wolf()
     elif cov_method == 'oracle_approximating':
-        S = OracleApproximating(df).oracle_approximating()
+        S = CovarianceShrinkage(df).oracle_approximating()
     else:  # sample_cov
         S = risk_models.sample_cov(df)
     
