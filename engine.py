@@ -3,9 +3,10 @@ import pandas as pd
 import yfinance as yf
 from pypfopt import BlackLittermanModel, risk_models, expected_returns
 from pypfopt.efficient_frontier import EfficientFrontier
-from pypfopt.covariance_shrinkage import LedoitWolf, OracleApproximating
+from pypfopt.risk_models import CovarianceShrinkage
 import scipy.stats as stats
 import concurrent.futures
+from cache import cache_get, cache_set, get_portfolio_cache_key
 
 def fetch_stock_data(ticker):
     """Fetch market cap, debt, and rich fundamentals for a given ticker."""
@@ -93,8 +94,18 @@ def get_fama_french_exposure(portfolio_returns, start_date, end_date):
         print(f"Fama-French Error: {e}")
         return None
 
-def get_portfolio_data(symbols):
+def get_portfolio_data(symbols, period="5y", use_cache=True):
     """Fetch data for all symbols."""
+    if use_cache:
+        cache_key = get_portfolio_cache_key(symbols, period)
+        cached = cache_get(cache_key)
+        if cached is not None:
+            df = pd.DataFrame(cached["prices"])
+            if "date" in df.columns:
+                df = df.set_index("date")
+            df.index = pd.to_datetime(df.index)
+            return df, cached["mcaps"], cached["debts"], cached["assets_info"]
+    
     # Historical Prices
     tickers = yf.Tickers(symbols)
     df = tickers.history(period='5y', auto_adjust=True)['Close']
@@ -139,6 +150,16 @@ def get_portfolio_data(symbols):
                     aligned_fx = fx.reindex(df.index).ffill().bfill()
                     df[ticker] = df[ticker] * aligned_fx
                 
+    # Cache the result
+    if use_cache:
+        cache_data = {
+            "prices": df.to_dict(orient="split"),
+            "mcaps": mcaps,
+            "debts": debts,
+            "assets_info": assets_info
+        }
+        cache_set(cache_key, cache_data, ttl=21600)  # 6 hours TTL
+    
     return df, mcaps, debts, assets_info
 
 def walk_forward_backtest(returns_df, symbols, rf, start_date=None, train_days=252, test_days=63, rebalance_days=63):
@@ -296,7 +317,7 @@ def calculate_cvar(rp, confidence=0.99):
     cvar_value = -rp[rp <= var_threshold].mean()
     return max(0, cvar_value)
 
-def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='sample_cov', tau=0.05, min_weight=0.02, max_weight=0.25):
+def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='sample_cov', tau=0.05, min_weight=0.02, max_weight=0.25, benchmark='SPY'):
     """
     symbols: list of strings
     views: list of dicts {type: 'A'|'R', asset: idx, bull: idx, bear: idx, value: float}
@@ -306,8 +327,9 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
     tau: paramètre de confiance pour Black-Litterman (par défaut 0.05)
     min_weight: poids minimum par action (par défaut 2%)
     max_weight: poids maximum par action (par défaut 25%)
+    benchmark: ticker du benchmark (par défaut 'SPY')
     """
-    df, mcaps, debts, assets_info = get_portfolio_data(symbols)
+    df, mcaps, debts, assets_info = get_portfolio_data(symbols, use_cache=True)
     df100 = df / df.iloc[0] * 100
     
     # Risk-free rate
@@ -406,16 +428,16 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
     
     # Benchmark Comparison & Evolution
     try:
-        benchmark_ticker = yf.Ticker('SPY')
-        spy_hist = benchmark_ticker.history(period='5y')['Close'].dropna()
+        benchmark_ticker = yf.Ticker(benchmark)
+        bench_hist = benchmark_ticker.history(period='5y')['Close'].dropna()
         
-        spy_returns = spy_hist.pct_change().dropna()
-        if spy_returns.index.tz is not None:
-            spy_returns.index = spy_returns.index.tz_localize(None)
+        bench_returns = bench_hist.pct_change().dropna()
+        if bench_returns.index.tz is not None:
+            bench_returns.index = bench_returns.index.tz_localize(None)
         if rp.index.tz is not None:
             rp.index = rp.index.tz_localize(None)
             
-        aligned = pd.concat([rp, spy_returns], axis=1).dropna()
+        aligned = pd.concat([rp, bench_returns], axis=1).dropna()
         if len(aligned) > 5:
             cov_mat = np.cov(aligned.iloc[:,0], aligned.iloc[:,1])
             var_bench = np.var(aligned.iloc[:,1])
@@ -424,20 +446,20 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
             beta = 1.0
             
         # Benchmark Evolution (Normalized to 100 for Charting)
-        if spy_hist.index.tz is not None:
-            spy_hist.index = spy_hist.index.tz_localize(None)
+        if bench_hist.index.tz is not None:
+            bench_hist.index = bench_hist.index.tz_localize(None)
         
         # Ensure df100 is tz-naive
         if df100.index.tz is not None:
             df100.index = df100.index.tz_localize(None)
             
-        common_idx = df100.index.intersection(spy_hist.index)
+        common_idx = df100.index.intersection(bench_hist.index)
         if len(common_idx) > 0:
-            spy_aligned = spy_hist.loc[common_idx]
-            spy_aligned = spy_aligned / spy_aligned.iloc[0] * 100
+            bench_aligned = bench_hist.loc[common_idx]
+            bench_aligned = bench_aligned / bench_aligned.iloc[0] * 100
             
             # Format to dicts
-            benchmark_evolution = pd.DataFrame({'Date': common_idx, 'SPY': spy_aligned.values}).to_dict(orient='records')
+            benchmark_evolution = pd.DataFrame({'Date': common_idx, benchmark: bench_aligned.values}).to_dict(orient='records')
         else:
             benchmark_evolution = []
             
@@ -445,12 +467,14 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
         beta = 1.0
         benchmark_evolution = []
     
+    # Alpha de Jensen
+    
     # Alpha de Jensen : utiliser le rendement du benchmark observé sur la période
     try:
-        # Calcul du rendement annualisé du benchmark SPY sur la période
-        if len(spy_hist) >= 2:
-            total_return = (spy_hist.iloc[-1] / spy_hist.iloc[0]) - 1
-            years = len(spy_hist) / 252
+        # Calcul du rendement annualisé du benchmark sur la période
+        if len(bench_hist) >= 2:
+            total_return = (bench_hist.iloc[-1] / bench_hist.iloc[0]) - 1
+            years = len(bench_hist) / 252
             market_return = (1 + total_return) ** (1/years) - 1 if years > 0 else 0.12
         else:
             market_return = 0.12

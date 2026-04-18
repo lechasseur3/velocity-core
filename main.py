@@ -32,6 +32,7 @@ class AnalysisRequest(BaseModel):
     tau: Optional[float] = 0.05
     min_weight: Optional[float] = 0.02
     max_weight: Optional[float] = 0.25
+    benchmark: Optional[str] = "SPY"
 
 @app.post("/analyze")
 async def analyze(request: AnalysisRequest):
@@ -46,7 +47,8 @@ async def analyze(request: AnalysisRequest):
             cov_method=request.cov_method,
             tau=request.tau,
             min_weight=request.min_weight,
-            max_weight=request.max_weight
+            max_weight=request.max_weight,
+            benchmark=request.benchmark
         )
         return result
     except Exception as e:
