@@ -317,7 +317,7 @@ def calculate_cvar(rp, confidence=0.99):
     cvar_value = -rp[rp <= var_threshold].mean()
     return max(0, cvar_value)
 
-def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='sample_cov', tau=0.05, min_weight=0.02, max_weight=0.25, benchmark='SPY'):
+def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='sample_cov', tau=0.05, min_weight=0.02, max_weight=0.25, benchmark='SPY', risk_free_rate=None):
     """
     symbols: list of strings
     views: list of dicts {type: 'A'|'R', asset: idx, bull: idx, bear: idx, value: float}
@@ -333,12 +333,15 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
     df100 = df / df.iloc[0] * 100
     
     # Risk-free rate
-    try:
-        rf_data = yf.Ticker('^IRX').history(period='5d')['Close']
-        rf = rf_data.dropna().mean() / 100 if not rf_data.empty else 0.04
-        if np.isnan(rf): rf = 0.04
-    except:
-        rf = 0.04
+    if risk_free_rate is not None:
+        rf = risk_free_rate
+    else:
+        try:
+            rf_data = yf.Ticker('^IRX').history(period='5d')['Close']
+            rf = rf_data.dropna().mean() / 100 if not rf_data.empty else 0.04
+            if np.isnan(rf): rf = 0.04
+        except:
+            rf = 0.04
 
     # DATA ALIGNMENT: Ensure symbols match the fetched data
     fetched_symbols = df.columns.tolist()
@@ -533,6 +536,10 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
     # Walk-forward backtest
     wf_backtest = walk_forward_backtest(returns_df, fetched_symbols, rf)
 
+    # Portfolio weighted evolution (add Portefeuille column)
+    df100['Portefeuille'] = (df100[fetched_symbols] * w_series).sum(axis=1)
+    historical_evolution = df100.reset_index().assign(Date=df100.reset_index()['Date'].astype(str)).to_dict(orient='records')
+
     return {
         "weights": weights,
         "performance": {
@@ -549,7 +556,7 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
             "cvar_cornish_fisher": float(cvar_cornish_fisher)
         },
         "risk_contribution": (w_series * (S @ w_series) / (perf[1]**2 if perf[1] > 1e-6 else 1.0)).to_dict(),
-        "historical_evolution": df100.reset_index().assign(Date=df100.reset_index()['Date'].astype(str)).to_dict(orient='records'),
+        "historical_evolution": historical_evolution,
         "benchmark_evolution": benchmark_evolution,
         "daily_returns": returns_df.reset_index().assign(Date=returns_df.reset_index().index.astype(str) if 'Date' not in returns_df.reset_index().columns else returns_df.reset_index()['Date'].astype(str)).to_dict(orient='records'),
         "efficient_frontier": {"vols": vols, "rets": rets},

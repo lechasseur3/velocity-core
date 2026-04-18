@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import {
-  AreaChart, Area, ScatterChart, Scatter,
+  AreaChart, Area, LineChart, Line, ScatterChart, Scatter,
   BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   Cell
@@ -25,6 +25,13 @@ interface BLView {
   bull?: number;
   bear?: number;
   value: number;
+}
+
+interface QuoteData {
+  price: number;
+  change_pct: number;
+  currency: string;
+  name: string;
 }
 
 interface AnalysisResult {
@@ -54,7 +61,17 @@ interface AnalysisResult {
 }
 
 function formatPct(v: number) { return (v * 100).toFixed(2) + '%'; }
-function formatNum(v: number) { return v.toFixed(4); }
+function formatPrice(v: number, cur: string) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(v);
+}
+
+const REGIONS = [
+  { code: 'US', label: '🇺🇸 USA', rf: 0.043 },
+  { code: 'EU', label: '🇪🇺 Europe', rf: 0.025 },
+  { code: 'FR', label: '🇫🇷 France', rf: 0.028 },
+  { code: 'ASIA', label: '🇯🇵 Asie', rf: 0.005 },
+  { code: 'GLOBAL', label: '🌍 Mondial', rf: 0.035 },
+];
 
 export default function App() {
   const [tickers, setTickers] = useState<string[]>(['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 'JPM']);
@@ -69,6 +86,28 @@ export default function App() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [manualWeights, setManualWeights] = useState<Record<string, string>>({});
+  const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
+  const [region, setRegion] = useState('US');
+  const [activeTab, setActiveTab] = useState<'config' | 'results'>('config');
+
+  // Fetch real-time quotes
+  useEffect(() => {
+    if (tickers.length === 0) return;
+    const timer = setTimeout(() => {
+      axios.get(`/quotes?symbols=${tickers.join(',')}`).then(r => setQuotes(r.data)).catch(() => {});
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [tickers]);
+
+  // Refresh quotes every 30s
+  useEffect(() => {
+    const iv = setInterval(() => {
+      if (tickers.length > 0) {
+        axios.get(`/quotes?symbols=${tickers.join(',')}`).then(r => setQuotes(r.data)).catch(() => {});
+      }
+    }, 30000);
+    return () => clearInterval(iv);
+  }, [tickers]);
 
   const addTicker = () => {
     const t = tickerInput.trim().toUpperCase();
@@ -90,9 +129,12 @@ export default function App() {
 
   const removeView = (i: number) => setViews(views.filter((_, j) => j !== i));
 
+  const getRf = () => REGIONS.find(r => r.code === region)?.rf || 0.04;
+
   const analyze = useCallback(async () => {
     setLoading(true);
     setError('');
+    setActiveTab('results');
     try {
       const res = await axios.post<AnalysisResult>('/analyze', {
         symbols: tickers,
@@ -103,6 +145,7 @@ export default function App() {
         tau,
         min_weight: minWeight / 100,
         max_weight: maxWeight / 100,
+        risk_free_rate: getRf(),
       });
       setResult(res.data);
     } catch (e: any) {
@@ -110,335 +153,421 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [tickers, views, isAuto, manualWeights, covMethod, tau, minWeight, maxWeight]);
+  }, [tickers, views, isAuto, manualWeights, covMethod, tau, minWeight, maxWeight, region]);
+
+  const generateOptimal = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    setActiveTab('results');
+    try {
+      const res = await axios.get<{ tickers: string[], result: AnalysisResult }>(`/optimal-portfolio?region=${region}`);
+      setTickers(res.data.tickers);
+      setResult(res.data.result);
+    } catch (e: any) {
+      setError(e.response?.data?.detail || e.message || 'Failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [region]);
 
   const p = result?.performance;
-  const efData = result ? result.efficient_frontier.vols.map((v, i) => ({ vol: v, ret: result.efficient_frontier.rets[i] })) : [];
+  const efData = result ? result.efficient_frontier.vols.map((v, i) => ({ vol: v * 100, ret: result.efficient_frontier.rets[i] * 100 })) : [];
+  
   const evolData = result?.historical_evolution?.map((r: any) => {
     const d: any = { Date: r.Date?.slice(0, 10) };
     result.assets.forEach(a => d[a] = r[a]);
+    d['Portefeuille'] = r['Portefeuille'];
     return d;
   }) || [];
+  
   const benchData = result?.benchmark_evolution || [];
+  const benchTicker = result?.assets_info?.[result.assets[0]] ? 'SPY' : 'SPY';
+  
   const mergedEvol = evolData.map((d: any) => {
     const bd = benchData.find((b: any) => b.Date?.slice(0, 10) === d.Date);
-    return { ...d, SPY: bd?.SPY };
+    return { ...d, Benchmark: bd ? Object.values(bd).find((v: any) => typeof v === 'number' && v !== undefined && bd.Date !== v) : undefined };
   });
 
   const corrLabels = result?.assets || [];
   const ffData = result?.fama_french ? Object.entries(result.fama_french).map(([k, v]) => ({ factor: k, exposure: v })) : [];
-
   const wfResults = result?.walk_forward_backtest?.results || [];
 
   return (
-    <div className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight" style={{ color: 'var(--accent)' }}>
-          VELOCITY CORE
-        </h1>
-        <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>
-          Quantitative Portfolio Optimization Engine — Black-Litterman · Markowitz · Fama-French
-        </p>
-      </div>
-
-      {/* Config */}
-      <div className="card glow mb-6">
-        <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--accent)' }}>Configuration</h2>
-
-        {/* Tickers */}
-        <div className="mb-4">
-          <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>Actifs</label>
-          <div className="flex gap-2 mb-2 flex-wrap">
-            {tickers.map(t => (
-              <span key={t} className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium"
-                style={{ background: 'rgba(0,212,255,0.15)', color: 'var(--accent)', border: '1px solid rgba(0,212,255,0.3)' }}>
-                {t}
-                <button onClick={() => removeTicker(t)} className="ml-1 hover:opacity-70" style={{ color: 'var(--red)' }}>✕</button>
-              </span>
-            ))}
+    <div className="min-h-screen" style={{ background: '#0a0e1a' }}>
+      <div className="max-w-7xl mx-auto px-4 py-6 md:px-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-black tracking-tight" style={{ color: '#00d4ff' }}>
+              ⚡ VELOCITY CORE
+            </h1>
+            <p className="text-xs mt-1" style={{ color: '#64748b' }}>
+              Black-Litterman · Markowitz · Fama-French · VaR
+            </p>
           </div>
           <div className="flex gap-2">
-            <input value={tickerInput} onChange={e => setTickerInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addTicker()}
-              placeholder="Ajouter un ticker (ex: MC.PA)"
-              className="flex-1 px-3 py-2 rounded-lg text-sm"
-              style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-card)', color: 'var(--text-primary)' }} />
-            <button onClick={addTicker} className="px-4 py-2 rounded-lg text-sm font-medium"
-              style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}>+</button>
+            {REGIONS.map(r => (
+              <button key={r.code} onClick={() => setRegion(r.code)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                style={{
+                  background: region === r.code ? 'rgba(0,212,255,0.2)' : 'rgba(255,255,255,0.03)',
+                  color: region === r.code ? '#00d4ff' : '#64748b',
+                  border: region === r.code ? '1px solid rgba(0,212,255,0.4)' : '1px solid rgba(255,255,255,0.06)'
+                }}>
+                {r.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Params */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          <div>
-            <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Mode</label>
-            <select value={isAuto ? 'auto' : 'manual'} onChange={e => setIsAuto(e.target.value === 'auto')}
-              className="w-full px-3 py-2 rounded-lg text-sm"
-              style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-card)', color: 'var(--text-primary)' }}>
-              <option value="auto">Auto (Sharpe max)</option>
-              <option value="manual">Manuel</option>
-            </select>
+        {/* Live Quotes Ticker */}
+        {Object.keys(quotes).length > 0 && (
+          <div className="mb-4 flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+            {tickers.map(t => {
+              const q = quotes[t];
+              if (!q || !q.price) return null;
+              const up = q.change_pct >= 0;
+              return (
+                <div key={t} className="flex-shrink-0 px-3 py-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="text-xs font-bold" style={{ color: '#94a3b8' }}>{t}</div>
+                  <div className="text-sm font-bold" style={{ color: '#e2e8f0' }}>{formatPrice(q.price, q.currency)}</div>
+                  <div className="text-xs font-medium" style={{ color: up ? '#22c55e' : '#ef4444' }}>
+                    {up ? '▲' : '▼'} {q.change_pct.toFixed(2)}%
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div>
-            <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Covariance</label>
-            <select value={covMethod} onChange={e => setCovMethod(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg text-sm"
-              style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-card)', color: 'var(--text-primary)' }}>
-              <option value="sample_cov">Sample</option>
-              <option value="ledoit_wolf">Ledoit-Wolf</option>
-              <option value="oracle_approximating">Oracle Approximating</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Tau (BL)</label>
-            <input type="range" min="0.01" max="0.5" step="0.01" value={tau}
-              onChange={e => setTau(parseFloat(e.target.value))} className="w-full mt-2" />
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{tau}</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-xs" style={{ color: 'var(--text-secondary)' }}>Min %</label>
-              <input type="number" value={minWeight} onChange={e => setMinWeight(parseInt(e.target.value) || 0)}
-                className="w-full px-2 py-1 rounded text-sm"
-                style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-card)', color: 'var(--text-primary)' }} />
-            </div>
-            <div>
-              <label className="block text-xs" style={{ color: 'var(--text-secondary)' }}>Max %</label>
-              <input type="number" value={maxWeight} onChange={e => setMaxWeight(parseInt(e.target.value) || 25)}
-                className="w-full px-2 py-1 rounded text-sm"
-                style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-card)', color: 'var(--text-primary)' }} />
-            </div>
-          </div>
-        </div>
+        )}
 
-        {/* BL Views */}
-        <div className="mb-4">
-          <div className="flex items-center gap-2 mb-2">
-            <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Vues Black-Litterman</label>
-            <button onClick={addView} className="text-xs px-2 py-1 rounded" style={{ background: 'rgba(0,212,255,0.15)', color: 'var(--accent)' }}>+ Ajouter</button>
+        {/* Config Card */}
+        <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)' }}>
+          <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>Configuration</h2>
+
+          {/* Tickers */}
+          <div className="mb-4">
+            <label className="block text-xs mb-2" style={{ color: '#64748b' }}>Actifs</label>
+            <div className="flex gap-2 mb-2 flex-wrap">
+              {tickers.map(t => (
+                <span key={t} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{ background: 'rgba(0,212,255,0.08)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.2)' }}>
+                  {t}
+                  <button onClick={() => removeTicker(t)} className="hover:opacity-70" style={{ color: '#ef4444' }}>✕</button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input value={tickerInput} onChange={e => setTickerInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addTicker()}
+                placeholder="Ajouter (ex: MC.PA, SAP.DE)"
+                className="flex-1 px-3 py-2 rounded-lg text-sm"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }} />
+              <button onClick={addTicker} className="px-4 py-2 rounded-lg text-sm font-bold"
+                style={{ background: 'rgba(0,212,255,0.15)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.3)' }}>+</button>
+            </div>
           </div>
-          {views.map((v, i) => (
-            <div key={i} className="flex gap-2 mb-2 items-center flex-wrap">
-              <select value={v.type} onChange={e => updateView(i, 'type', e.target.value)}
-                className="px-2 py-1 rounded text-sm"
-                style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-card)', color: 'var(--text-primary)' }}>
-                <option value="A">Absolue</option>
-                <option value="R">Relative</option>
+
+          {/* Params */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+            <div>
+              <label className="block text-xs mb-1" style={{ color: '#64748b' }}>Mode</label>
+              <select value={isAuto ? 'auto' : 'manual'} onChange={e => setIsAuto(e.target.value === 'auto')}
+                className="w-full px-3 py-2 rounded-lg text-sm"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
+                <option value="auto">Auto (Sharpe max)</option>
+                <option value="manual">Manuel</option>
               </select>
-              {v.type === 'A' ? (
-                <select value={v.asset ?? 0} onChange={e => updateView(i, 'asset', parseInt(e.target.value))}
-                  className="px-2 py-1 rounded text-sm"
-                  style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-card)', color: 'var(--text-primary)' }}>
-                  {tickers.map((t, j) => <option key={j} value={j}>{t}</option>)}
-                </select>
-              ) : (
-                <>
-                  <select value={v.bull ?? 0} onChange={e => updateView(i, 'bull', parseInt(e.target.value))}
-                    className="px-2 py-1 rounded text-sm"
-                    style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-card)', color: 'var(--text-primary)' }}>
-                    {tickers.map((t, j) => <option key={j} value={j}>{t} ↑</option>)}
-                  </select>
-                  <select value={v.bear ?? 1} onChange={e => updateView(i, 'bear', parseInt(e.target.value))}
-                    className="px-2 py-1 rounded text-sm"
-                    style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-card)', color: 'var(--text-primary)' }}>
-                    {tickers.map((t, j) => <option key={j} value={j}>{t} ↓</option>)}
-                  </select>
-                </>
-              )}
-              <input type="number" value={v.value} onChange={e => updateView(i, 'value', parseFloat(e.target.value) || 0)}
-                step="0.5" placeholder="Rendement %"
-                className="w-20 px-2 py-1 rounded text-sm"
-                style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-card)', color: 'var(--text-primary)' }} />
-              <button onClick={() => removeView(i)} style={{ color: 'var(--red)' }}>✕</button>
             </div>
-          ))}
-        </div>
+            <div>
+              <label className="block text-xs mb-1" style={{ color: '#64748b' }}>Covariance</label>
+              <select value={covMethod} onChange={e => setCovMethod(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-sm"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
+                <option value="sample_cov">Sample</option>
+                <option value="ledoit_wolf">Ledoit-Wolf</option>
+                <option value="oracle_approximating">Oracle Approx.</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs mb-1" style={{ color: '#64748b' }}>Tau (BL): {tau}</label>
+              <input type="range" min="0.01" max="0.5" step="0.01" value={tau}
+                onChange={e => setTau(parseFloat(e.target.value))} className="w-full mt-2 accent-cyan-400" />
+            </div>
+            <div>
+              <label className="block text-xs mb-1" style={{ color: '#64748b' }}>Min poids %</label>
+              <input type="number" value={minWeight} onChange={e => setMinWeight(parseInt(e.target.value) || 0)}
+                className="w-full px-3 py-2 rounded-lg text-sm"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }} />
+            </div>
+            <div>
+              <label className="block text-xs mb-1" style={{ color: '#64748b' }}>Max poids %</label>
+              <input type="number" value={maxWeight} onChange={e => setMaxWeight(parseInt(e.target.value) || 25)}
+                className="w-full px-3 py-2 rounded-lg text-sm"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }} />
+            </div>
+          </div>
 
-        <button onClick={analyze} disabled={loading || tickers.length === 0}
-          className="w-full py-3 rounded-lg font-semibold text-sm transition-all"
-          style={{
-            background: loading ? 'var(--border-card)' : 'var(--accent)',
-            color: loading ? 'var(--text-secondary)' : 'var(--bg-primary)',
-            cursor: loading ? 'not-allowed' : 'pointer'
-          }}>
-          {loading ? '⟳ Analyse en cours...' : '▶ Analyser le portefeuille'}
-        </button>
-        {error && <p className="mt-2 text-sm text-center" style={{ color: 'var(--red)' }}>{error}</p>}
-      </div>
-
-      {/* Results */}
-      {result && p && (
-        <>
-          {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-            {[
-              { label: 'Rendement Espéré', value: formatPct(p.expected_return), color: 'var(--green)' },
-              { label: 'Volatilité', value: formatPct(p.volatility), color: 'var(--yellow)' },
-              { label: 'Ratio de Sharpe', value: p.sharpe.toFixed(3), color: 'var(--accent)' },
-              { label: 'Beta', value: p.beta.toFixed(3), color: '#8b5cf6' },
-              { label: 'Alpha (Jensen)', value: formatPct(p.alpha), color: p.alpha >= 0 ? 'var(--green)' : 'var(--red)' },
-            ].map(k => (
-              <div key={k.label} className="card text-center">
-                <div className="text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>{k.label}</div>
-                <div className="text-xl font-bold" style={{ color: k.color }}>{k.value}</div>
+          {/* BL Views */}
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <label className="text-xs font-bold uppercase" style={{ color: '#64748b' }}>Vues Black-Litterman</label>
+              <button onClick={addView} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(0,212,255,0.1)', color: '#00d4ff' }}>+ Ajouter</button>
+            </div>
+            {views.map((v, i) => (
+              <div key={i} className="flex gap-2 mb-2 items-center flex-wrap">
+                <select value={v.type} onChange={e => updateView(i, 'type', e.target.value)}
+                  className="px-2 py-1 rounded text-sm"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
+                  <option value="A">Absolue</option>
+                  <option value="R">Relative</option>
+                </select>
+                {v.type === 'A' ? (
+                  <select value={v.asset ?? 0} onChange={e => updateView(i, 'asset', parseInt(e.target.value))}
+                    className="px-2 py-1 rounded text-sm"
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
+                    {tickers.map((t, j) => <option key={j} value={j}>{t}</option>)}
+                  </select>
+                ) : (
+                  <>
+                    <select value={v.bull ?? 0} onChange={e => updateView(i, 'bull', parseInt(e.target.value))}
+                      className="px-2 py-1 rounded text-sm"
+                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
+                      {tickers.map((t, j) => <option key={j} value={j}>{t} ↑</option>)}
+                    </select>
+                    <select value={v.bear ?? 1} onChange={e => updateView(i, 'bear', parseInt(e.target.value))}
+                      className="px-2 py-1 rounded text-sm"
+                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
+                      {tickers.map((t, j) => <option key={j} value={j}>{t} ↓</option>)}
+                    </select>
+                  </>
+                )}
+                <input type="number" value={v.value} onChange={e => updateView(i, 'value', parseFloat(e.target.value) || 0)}
+                  step="0.5" placeholder="Rendement %"
+                  className="w-20 px-2 py-1 rounded text-sm"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }} />
+                <button onClick={() => removeView(i)} style={{ color: '#ef4444' }}>✕</button>
               </div>
             ))}
           </div>
 
-          {/* Risk Cards */}
-          <div className="card glow mb-6">
-            <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--accent)' }}>Risque — VaR & CVaR</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {/* Action Buttons */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button onClick={analyze} disabled={loading || tickers.length === 0}
+              className="py-3 rounded-xl font-bold text-sm transition-all"
+              style={{
+                background: loading ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #00d4ff, #0099cc)',
+                color: loading ? '#64748b' : '#0a0e1a',
+                cursor: loading ? 'not-allowed' : 'pointer'
+              }}>
+              {loading ? '⟳ Analyse en cours...' : '▶ Analyser le portefeuille'}
+            </button>
+            <button onClick={generateOptimal} disabled={loading}
+              className="py-3 rounded-xl font-bold text-sm transition-all"
+              style={{
+                background: loading ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #22c55e, #16a34a)',
+                color: loading ? '#64748b' : '#0a0e1a',
+                cursor: loading ? 'not-allowed' : 'pointer'
+              }}>
+              {loading ? '⟳ Génération...' : `✨ Portefeuille optimal — ${REGIONS.find(r => r.code === region)?.label}`}
+            </button>
+          </div>
+          {error && <p className="mt-3 text-sm text-center" style={{ color: '#ef4444' }}>{error}</p>}
+        </div>
+
+        {/* Results */}
+        {result && p && (
+          <>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
               {[
-                { label: 'VaR Paramétrique 99%', value: formatPct(p.var_99_pct) },
-                { label: 'VaR Historique 99%', value: formatPct(p.var_historical) },
-                { label: 'VaR Cornish-Fisher 99%', value: formatPct(p.var_cornish_fisher) },
-                { label: 'CVaR Paramétrique', value: formatPct(p.cvar_parametric) },
-                { label: 'CVaR Historique', value: formatPct(p.cvar_historical) },
-                { label: 'CVaR Cornish-Fisher', value: formatPct(p.cvar_cornish_fisher) },
-              ].map(r => (
-                <div key={r.label} className="p-3 rounded-lg" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
-                  <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>{r.label}</div>
-                  <div className="text-lg font-bold" style={{ color: 'var(--red)' }}>{r.value}</div>
+                { label: 'Rendement Espéré', value: formatPct(p.expected_return), color: '#22c55e', icon: '📈' },
+                { label: 'Volatilité', value: formatPct(p.volatility), color: '#eab308', icon: '📊' },
+                { label: 'Ratio de Sharpe', value: p.sharpe.toFixed(3), color: '#00d4ff', icon: '⚡' },
+                { label: 'Beta', value: p.beta.toFixed(3), color: '#8b5cf6', icon: '🎯' },
+                { label: 'Alpha (Jensen)', value: formatPct(p.alpha), color: p.alpha >= 0 ? '#22c55e' : '#ef4444', icon: p.alpha >= 0 ? '✅' : '❌' },
+              ].map(k => (
+                <div key={k.label} className="rounded-xl p-4 text-center"
+                  style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="text-lg mb-1">{k.icon}</div>
+                  <div className="text-xs mb-1" style={{ color: '#64748b' }}>{k.label}</div>
+                  <div className="text-xl font-black" style={{ color: k.color }}>{k.value}</div>
                 </div>
               ))}
             </div>
-          </div>
 
-          {/* Portfolio Evolution vs Benchmark */}
-          <div className="card glow mb-6">
-            <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--accent)' }}>Évolution du Portefeuille vs Benchmark</h2>
-            <ResponsiveContainer width="100%" height={350}>
-              <AreaChart data={mergedEvol}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="Date" tick={{ fill: '#94a3b8', fontSize: 10 }} interval="preserveStartEnd" />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                <Tooltip contentStyle={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8 }} />
-                <Legend />
-                {result.assets.map((a, i) => (
-                  <Area key={a} type="monotone" dataKey={a} stroke={COLORS[i % COLORS.length]} fill={COLORS[i % COLORS.length]} fillOpacity={0.1} />
-                ))}
-                <Area type="monotone" dataKey="SPY" stroke="#ffffff" fill="none" strokeWidth={2} strokeDasharray="5 5" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Efficient Frontier */}
-          <div className="card glow mb-6">
-            <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--accent)' }}>Frontière Efficiente</h2>
-            <ResponsiveContainer width="100%" height={350}>
-              <ScatterChart>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis type="number" dataKey="vol" name="Volatilité" tick={{ fill: '#94a3b8' }} unit="%" />
-                <YAxis type="number" dataKey="ret" name="Rendement" tick={{ fill: '#94a3b8' }} unit="%" />
-                <Tooltip contentStyle={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8 }} />
-                <Scatter data={efData} fill="#00d4ff" />
-              </ScatterChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Weights Table */}
-          <div className="card glow mb-6">
-            <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--accent)' }}>Poids Optimaux</h2>
-            <div className="space-y-3">
-              {result.assets.map((a, i) => {
-                const w = (result.weights[a] || 0) * 100;
-                return (
-                  <div key={a} className="flex items-center gap-3">
-                    <span className="w-16 text-sm font-medium">{a}</span>
-                    <div className="flex-1 h-6 rounded-full overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-                      <div className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${w}%`, background: COLORS[i % COLORS.length], minWidth: w > 0 ? '4px' : '0' }} />
-                    </div>
-                    <span className="w-16 text-right text-sm font-medium" style={{ color: COLORS[i % COLORS.length] }}>{w.toFixed(1)}%</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Correlation Matrix */}
-          {result.correlation_matrix && result.correlation_matrix.length > 0 && (
-            <div className="card glow mb-6">
-              <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--accent)' }}>Matrice de Corrélation</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr>
-                      <th className="p-2" style={{ color: 'var(--text-secondary)' }}></th>
-                      {corrLabels.map(l => <th key={l} className="p-2" style={{ color: 'var(--text-secondary)' }}>{l}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.correlation_matrix.map((row, i) => (
-                      <tr key={i}>
-                        <td className="p-2 font-medium" style={{ color: 'var(--text-secondary)' }}>{corrLabels[i]}</td>
-                        {row.map((v, j) => {
-                          const intensity = Math.abs(v);
-                          const color = v > 0 ? `rgba(0,212,255,${intensity * 0.6})` : `rgba(239,68,68,${intensity * 0.6})`;
-                          return (
-                            <td key={j} className="p-2 text-center" style={{ background: color, borderRadius: 2 }}>{v.toFixed(2)}</td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Fama-French */}
-          {ffData.length > 0 && (
-            <div className="card glow mb-6">
-              <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--accent)' }}>Exposition Fama-French 5 Facteurs</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <RadarChart data={ffData}>
-                  <PolarGrid stroke="#1e293b" />
-                  <PolarAngleAxis dataKey="factor" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                  <PolarRadiusAxis tick={{ fill: '#64748b', fontSize: 9 }} />
-                  <Radar name="Exposition" dataKey="exposure" stroke="#00d4ff" fill="#00d4ff" fillOpacity={0.3} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          {/* Walk-Forward Backtest */}
-          {wfResults.length > 0 && (
-            <div className="card glow mb-6">
-              <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--accent)' }}>Walk-Forward Backtest</h2>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+            {/* Risk Cards */}
+            <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#ef4444' }}>⚠️ Risque — VaR & CVaR</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {[
-                  { label: 'Rendement Moyen', value: formatPct(result.walk_forward_backtest.summary.avg_return) },
-                  { label: 'Volatilité Moyenne', value: formatPct(result.walk_forward_backtest.summary.avg_volatility) },
-                  { label: 'Sharpe Moyen', value: result.walk_forward_backtest.summary.avg_sharpe.toFixed(3) },
-                  { label: 'VaR 99% Moyen', value: formatPct(result.walk_forward_backtest.summary.avg_var_99) },
-                  { label: 'Max Drawdown', value: formatPct(result.walk_forward_backtest.summary.max_drawdown) },
-                ].map(s => (
-                  <div key={s.label} className="text-center">
-                    <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>{s.label}</div>
-                    <div className="text-lg font-bold" style={{ color: 'var(--accent)' }}>{s.value}</div>
+                  { label: 'VaR Paramétrique 99%', value: formatPct(p.var_99_pct) },
+                  { label: 'VaR Historique 99%', value: formatPct(p.var_historical) },
+                  { label: 'VaR Cornish-Fisher 99%', value: formatPct(p.var_cornish_fisher) },
+                  { label: 'CVaR Paramétrique', value: formatPct(p.cvar_parametric) },
+                  { label: 'CVaR Historique', value: formatPct(p.cvar_historical) },
+                  { label: 'CVaR Cornish-Fisher', value: formatPct(p.cvar_cornish_fisher) },
+                ].map(r => (
+                  <div key={r.label} className="p-3 rounded-lg" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                    <div className="text-xs" style={{ color: '#64748b' }}>{r.label}</div>
+                    <div className="text-lg font-bold" style={{ color: '#ef4444' }}>{r.value}</div>
                   </div>
                 ))}
               </div>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={wfResults.map(r => ({
-                  period: r.period_start?.slice(0, 10) || '',
-                  return: r.return * 100,
-                  sharpe: r.sharpe
-                }))}>
+            </div>
+
+            {/* Portfolio Evolution vs Benchmark */}
+            <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>📈 Évolution du Portefeuille vs Benchmark</h2>
+              <ResponsiveContainer width="100%" height={380}>
+                <LineChart data={mergedEvol}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="period" tick={{ fill: '#94a3b8', fontSize: 9 }} />
-                  <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                  <Tooltip contentStyle={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8 }} />
-                  <Bar dataKey="return" name="Rendement %" fill="#00d4ff" radius={[4, 4, 0, 0]} />
-                </BarChart>
+                  <XAxis dataKey="Date" tick={{ fill: '#64748b', fontSize: 9 }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
+                  <Tooltip contentStyle={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, color: '#e2e8f0' }} />
+                  <Legend />
+                  {/* Individual assets as thin lines */}
+                  {result.assets.map((a, i) => (
+                    <Line key={a} type="monotone" dataKey={a} stroke={COLORS[i % COLORS.length]} strokeWidth={1} dot={false} opacity={0.4} />
+                  ))}
+                  {/* PORTFOLIO — bold line */}
+                  <Line type="monotone" dataKey="Portefeuille" stroke="#00d4ff" strokeWidth={3} dot={false} />
+                  {/* Benchmark — dashed white */}
+                  <Line type="monotone" dataKey="Benchmark" stroke="#ffffff" strokeWidth={2} strokeDasharray="8 4" dot={false} />
+                </LineChart>
               </ResponsiveContainer>
             </div>
-          )}
-        </>
-      )}
+
+            {/* Efficient Frontier */}
+            <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>🎯 Frontière Efficiente</h2>
+              <ResponsiveContainer width="100%" height={350}>
+                <ScatterChart>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis type="number" dataKey="vol" name="Volatilité" tick={{ fill: '#64748b' }} unit="%" label={{ value: 'Volatilité (%)', position: 'bottom', fill: '#64748b' }} />
+                  <YAxis type="number" dataKey="ret" name="Rendement" tick={{ fill: '#64748b' }} unit="%" label={{ value: 'Rendement (%)', angle: -90, position: 'insideLeft', fill: '#64748b' }} />
+                  <Tooltip contentStyle={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, color: '#e2e8f0' }} />
+                  <Scatter data={efData} fill="#00d4ff" />
+                  {p && efData.length > 0 && (
+                    <Scatter data={[{ vol: p.volatility * 100, ret: p.expected_return * 100 }]} fill="#22c55e" />
+                  )}
+                </ScatterChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Weights */}
+            <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>⚖️ Poids Optimaux</h2>
+              <div className="space-y-3">
+                {result.assets.map((a, i) => {
+                  const w = (result.weights[a] || 0) * 100;
+                  const q = quotes[a];
+                  return (
+                    <div key={a} className="flex items-center gap-3">
+                      <div className="w-24 flex items-center gap-2">
+                        <span className="text-sm font-bold" style={{ color: COLORS[i % COLORS.length] }}>{a}</span>
+                        {q?.price && <span className="text-xs" style={{ color: '#64748b' }}>{q.price.toFixed(0)}</span>}
+                      </div>
+                      <div className="flex-1 h-7 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                        <div className="h-full rounded-full transition-all duration-700 flex items-center justify-end pr-2"
+                          style={{ width: `${w}%`, background: `linear-gradient(90deg, ${COLORS[i % COLORS.length]}33, ${COLORS[i % COLORS.length]})`, minWidth: w > 0 ? '24px' : '0' }}>
+                          <span className="text-xs font-bold" style={{ color: '#e2e8f0' }}>{w.toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Correlation Matrix */}
+            {result.correlation_matrix && result.correlation_matrix.length > 0 && (
+              <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }>🔢 Matrice de Corrélation</h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th className="p-2" style={{ color: '#64748b' }}></th>
+                        {corrLabels.map(l => <th key={l} className="p-2" style={{ color: '#64748b' }}>{l}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.correlation_matrix.map((row, i) => (
+                        <tr key={i}>
+                          <td className="p-2 font-bold" style={{ color: '#64748b' }}>{corrLabels[i]}</td>
+                          {row.map((v, j) => {
+                            const abs = Math.abs(v);
+                            const bg = i === j ? 'rgba(0,212,255,0.15)' : v > 0 ? `rgba(0,212,255,${abs * 0.3})` : `rgba(239,68,68,${abs * 0.3})`;
+                            return <td key={j} className="p-2 text-center rounded" style={{ background: bg, color: '#e2e8f0' }}>{v.toFixed(2)}</td>;
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Fama-French */}
+            {ffData.length > 0 && (
+              <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>🧬 Exposition Fama-French 5 Facteurs</h2>
+                <ResponsiveContainer width="100%" height={300}>
+                  <RadarChart data={ffData}>
+                    <PolarGrid stroke="#1e293b" />
+                    <PolarAngleAxis dataKey="factor" tick={{ fill: '#64748b', fontSize: 11 }} />
+                    <PolarRadiusAxis tick={{ fill: '#475569', fontSize: 9 }} />
+                    <Radar name="Exposition" dataKey="exposure" stroke="#00d4ff" fill="#00d4ff" fillOpacity={0.2} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Walk-Forward Backtest */}
+            {wfResults.length > 0 && (
+              <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>🔄 Walk-Forward Backtest</h2>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                  {[
+                    { label: 'Rendement Moyen', value: formatPct(result.walk_forward_backtest.summary.avg_return), color: '#22c55e' },
+                    { label: 'Volatilité Moyenne', value: formatPct(result.walk_forward_backtest.summary.avg_volatility), color: '#eab308' },
+                    { label: 'Sharpe Moyen', value: result.walk_forward_backtest.summary.avg_sharpe.toFixed(3), color: '#00d4ff' },
+                    { label: 'VaR 99% Moyen', value: formatPct(result.walk_forward_backtest.summary.avg_var_99), color: '#ef4444' },
+                    { label: 'Max Drawdown', value: formatPct(result.walk_forward_backtest.summary.max_drawdown), color: '#ef4444' },
+                  ].map(s => (
+                    <div key={s.label} className="text-center p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                      <div className="text-xs" style={{ color: '#64748b' }}>{s.label}</div>
+                      <div className="text-lg font-bold" style={{ color: s.color }}>{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={wfResults.map(r => ({
+                    period: r.period_start?.slice(0, 10) || '',
+                    return: r.return * 100,
+                    sharpe: r.sharpe
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <XAxis dataKey="period" tick={{ fill: '#64748b', fontSize: 9 }} />
+                    <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
+                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, color: '#e2e8f0' }} />
+                    <Bar dataKey="return" name="Rendement %" radius={[4, 4, 0, 0]}>
+                      {wfResults.map((r, i) => (
+                        <Cell key={i} fill={r.return >= 0 ? '#22c55e' : '#ef4444'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="text-center py-4 text-xs" style={{ color: '#475569' }}>
+              Velocity Core v1.0 — Karl BAUJON — Black-Litterman · Markowitz · Fama-French
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

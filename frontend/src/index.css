@@ -1,39 +1,29 @@
-@import "tailwindcss";
-
 :root {
-  --bg-primary: #0a0f1a;
-  --bg-card: #111827;
-  --border-card: #1e293b;
+  --bg-primary: #0a0e1a;
+  --bg-card: rgba(15,20,35,0.8);
   --accent: #00d4ff;
-  --accent-dim: #0891b2;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
+  --text-primary: #e2e8f0;
+  --text-secondary: #64748b;
+  --border: rgba(255,255,255,0.06);
   --green: #22c55e;
   --red: #ef4444;
   --yellow: #eab308;
 }
 
-* { box-sizing: border-box; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-.card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-card);
-  border-radius: 12px;
-  padding: 20px;
-}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
-.glow {
-  box-shadow: 0 0 20px rgba(0, 212, 255, 0.1);
-}
+select option { background: #111827; color: #e2e8f0; }
 
-input, select, button {
-  font-family: inherit;
-}
+input[type="range"] { height: 4px; }
