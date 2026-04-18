@@ -159,7 +159,6 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const isLight = theme === 'light';
-  const isLight = theme === 'light';
   const colors = isLight
     ? ['#b8941f', '#7c3aed', '#16a34a', '#ca8a04', '#dc2626', '#ea580c', '#db2777', '#0891b2', '#9333ea', '#65a30d']
     : COLORS;
