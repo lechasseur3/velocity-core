@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
-  AreaChart, Area, LineChart, Line, ScatterChart, Scatter,
+  LineChart, Line, ScatterChart, Scatter,
   BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  Cell
+  Cell, Brush
 } from 'recharts';
 import './App.css';
 
@@ -61,7 +61,6 @@ interface AnalysisResult {
   walk_forward_backtest: any;
 }
 
-function formatPct(v: number) { return (v * 100).toFixed(2) + '%'; }
 function formatPrice(v: number, cur: string) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(v);
 }
@@ -80,6 +79,38 @@ const REGIONS = [
   { code: 'GLOBAL', label: '🌍 Mondial', rf: 0.035 },
 ];
 
+/* ─── Animated Counter Component ────────────────────────── */
+function AnimatedCounter({ value, decimals = 2, suffix = '' }: { value: number; decimals?: number; suffix?: string }) {
+  const [display, setDisplay] = useState(0);
+  const ref = useRef(value);
+  const frameRef = useRef<number>(0);
+
+  useEffect(() => {
+    const start = ref.current;
+    const end = value;
+    const duration = 600;
+    const startTime = performance.now();
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = start + (end - start) * eased;
+      setDisplay(current);
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(animate);
+      } else {
+        ref.current = end;
+      }
+    };
+
+    frameRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [value]);
+
+  return <span className="vc-counter">{display.toFixed(decimals)}{suffix}</span>;
+}
+
 export default function App() {
   const [tickers, setTickers] = useState<string[]>(['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 'JPM']);
   const [tickerInput, setTickerInput] = useState('');
@@ -92,11 +123,12 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [manualWeights, setManualWeights] = useState<Record<string, string>>({});
+  const [manualWeights] = useState<Record<string, string>>({});
   const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
   const [region, setRegion] = useState('US');
-  const [activeTab, setActiveTab] = useState<'config' | 'results'>('config');
+  const [activeTab, setActiveTab] = useState<'config' | 'results' | 'risk' | 'backtest'>('config');
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const tickerRef = useRef<HTMLDivElement>(null);
 
   // Fetch real-time quotes
@@ -184,7 +216,6 @@ export default function App() {
   const p = result?.performance;
   const efData = result ? result.efficient_frontier.vols.map((v, i) => ({ vol: v * 100, ret: result.efficient_frontier.rets[i] * 100 })) : [];
 
-  // Merge evolution data with benchmark
   const evolData = result?.historical_evolution?.map((r: any) => {
     const d: any = { Date: r.Date?.slice(0, 10) };
     result.assets.forEach(a => d[a] = r[a]);
@@ -193,8 +224,6 @@ export default function App() {
   }) || [];
 
   const benchData = result?.benchmark_evolution || [];
-
-  // Better benchmark merge: normalize by ticker name from benchData keys
   const benchKeys = benchData.length > 0 ? Object.keys(benchData[0]).filter(k => k !== 'Date' && typeof benchData[0][k] === 'number') : [];
   const benchValueKey = benchKeys[0] || null;
 
@@ -206,361 +235,380 @@ export default function App() {
   const corrLabels = result?.assets || [];
   const ffData = result?.fama_french ? Object.entries(result.fama_french).map(([k, v]) => ({ factor: k, exposure: v })) : [];
   const wfResults = result?.walk_forward_backtest?.results || [];
-
   const selectedAssetInfo = selectedAsset && result?.assets_info?.[selectedAsset] ? result.assets_info[selectedAsset] : null;
 
-  return (
-    <div className="min-h-screen" style={{ background: '#0a0e1a' }}>
-      <div className="max-w-7xl mx-auto px-4 py-6 md:px-8">
+  // Tooltip formatters
+  const chartTooltipStyle = {
+    background: 'rgba(10,14,26,0.95)',
+    border: '1px solid rgba(0,212,255,0.2)',
+    borderRadius: 10,
+    color: '#e2e8f0',
+    fontSize: 12,
+    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+  };
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 flex-wrap gap-4 no-print">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-black tracking-tight" style={{ color: '#00d4ff' }}>
-              ⚡ VELOCITY CORE
-            </h1>
-            <p className="text-xs mt-1" style={{ color: '#64748b' }}>
-              Black-Litterman · Markowitz · Fama-French · VaR
-            </p>
-          </div>
-          <div className="flex gap-2 region-buttons flex-wrap">
+  const navItems = [
+    { key: 'config' as const, label: 'Configuration', icon: '⚙️' },
+    { key: 'results' as const, label: 'Résultats', icon: '📊' },
+    { key: 'risk' as const, label: 'Risque', icon: '🛡️' },
+    { key: 'backtest' as const, label: 'Backtest', icon: '🔄' },
+  ];
+
+  return (
+    <div className="vc-layout">
+      {/* Mobile sidebar overlay */}
+      <div className={`vc-sidebar-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} />
+
+      {/* Mobile toggle */}
+      <button className="vc-mobile-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
+
+      {/* ─── Sidebar ─────────────────────────────────────── */}
+      <aside className={`vc-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <div className="vc-sidebar-logo">
+          <h1>⚡ VELOCITY</h1>
+          <p>Core Engine</p>
+        </div>
+
+        <nav className="vc-nav">
+          {navItems.map(item => (
+            <button key={item.key}
+              className={`vc-nav-item ${activeTab === item.key ? 'active' : ''}`}
+              onClick={() => { setActiveTab(item.key); setSidebarOpen(false); }}>
+              <span className="nav-icon">{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* Region in sidebar */}
+        <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#475569', marginBottom: 8 }}>Région</div>
+          <div className="vc-region-bar">
             {REGIONS.map(r => (
-              <button key={r.code} onClick={() => setRegion(r.code)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                style={{
-                  background: region === r.code ? 'rgba(0,212,255,0.2)' : 'rgba(255,255,255,0.03)',
-                  color: region === r.code ? '#00d4ff' : '#64748b',
-                  border: region === r.code ? '1px solid rgba(0,212,255,0.4)' : '1px solid rgba(255,255,255,0.06)'
-                }}>
+              <button key={r.code} onClick={() => setRegion(r.code)} className={`vc-region-btn ${region === r.code ? 'active' : ''}`}>
                 {r.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Live Quotes Ticker — smooth horizontal scroll */}
-        {Object.keys(quotes).length > 0 && (
-          <div className="mb-4 overflow-hidden no-print" ref={tickerRef}>
-            <div className="ticker-scroll">
-              {[...tickers, ...tickers].map((t, idx) => {
-                const q = quotes[t];
-                if (!q || !q.price) return null;
-                const up = q.change_pct >= 0;
-                return (
-                  <div key={`${t}-${idx}`} className="flex-shrink-0 px-3 py-2 rounded-lg"
-                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div className="text-xs font-bold" style={{ color: '#94a3b8' }}>{t}</div>
-                    <div className="text-sm font-bold" style={{ color: '#e2e8f0' }}>{formatPrice(q.price, q.currency)}</div>
-                    <div className="text-xs font-medium" style={{ color: up ? '#22c55e' : '#ef4444' }}>
-                      {up ? '▲' : '▼'} {q.change_pct.toFixed(2)}%
-                    </div>
-                  </div>
-                );
-              })}
+        <div className="vc-sidebar-footer">
+          Velocity Core v2.0<br />Black-Litterman · Markowitz · Fama-French
+        </div>
+      </aside>
+
+      {/* ─── Main Content ────────────────────────────────── */}
+      <main className="vc-main">
+
+        {/* ─── CONFIG TAB ─────────────────────────────────── */}
+        {activeTab === 'config' && (
+          <div className="vc-page">
+            <div className="vc-section-header">
+              <h2>⚙️ Configuration</h2>
+              <p>Construisez votre portefeuille, paramétrez l'optimisation et lancez l'analyse.</p>
             </div>
-          </div>
-        )}
 
-        {/* Loader */}
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-16 no-print">
-            <div className="loader-spinner mb-4"></div>
-            <p className="text-sm font-medium" style={{ color: '#00d4ff' }}>Analyse en cours...</p>
-            <div className="mt-4 space-y-2 w-64">
-              <div className="skeleton-line" style={{ width: '80%' }}></div>
-              <div className="skeleton-line" style={{ width: '60%' }}></div>
-              <div className="skeleton-line" style={{ width: '90%' }}></div>
-            </div>
-          </div>
-        )}
-
-        {/* Config Card */}
-        {!loading && (
-          <div className="rounded-xl p-6 mb-6 no-print" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)' }}>
-            <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>Configuration</h2>
-
-            {/* Tickers */}
-            <div className="mb-4">
-              <label className="block text-xs mb-2" style={{ color: '#64748b' }}>Actifs</label>
-              <div className="flex gap-2 mb-2 flex-wrap">
+            <div className="vc-card">
+              {/* Tickers Section */}
+              <div className="vc-card-title"><span className="title-icon">🏷️</span> Actifs sélectionnés</div>
+              <div className="vc-chips">
                 {tickers.map(t => (
-                  <span key={t} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                    style={{ background: 'rgba(0,212,255,0.08)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.2)' }}>
+                  <span key={t} className="vc-chip">
                     {t}
-                    <button onClick={() => removeTicker(t)} className="hover:opacity-70" style={{ color: '#ef4444' }}>✕</button>
+                    <button className="chip-remove" onClick={() => removeTicker(t)}>✕</button>
                   </span>
                 ))}
               </div>
-              <div className="flex gap-2">
+              <div className="vc-chip-input-row">
                 <input value={tickerInput} onChange={e => setTickerInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addTicker()}
-                  placeholder="Ajouter (ex: MC.PA, SAP.DE)"
-                  className="flex-1 px-3 py-2 rounded-lg text-sm"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }} />
-                <button onClick={addTicker} className="px-4 py-2 rounded-lg text-sm font-bold"
-                  style={{ background: 'rgba(0,212,255,0.15)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.3)' }}>+</button>
+                  placeholder="Ajouter un ticker (ex: MC.PA, SAP.DE)" />
+                <button className="vc-chip-add-btn" onClick={addTicker}>+ Ajouter</button>
               </div>
             </div>
 
-            {/* Params */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4 config-grid">
-              <div>
-                <label className="block text-xs mb-1" style={{ color: '#64748b' }}>Mode</label>
-                <select value={isAuto ? 'auto' : 'manual'} onChange={e => setIsAuto(e.target.value === 'auto')}
-                  className="w-full px-3 py-2 rounded-lg text-sm"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
-                  <option value="auto">Auto (Sharpe max)</option>
-                  <option value="manual">Manuel</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: '#64748b' }}>Covariance</label>
-                <select value={covMethod} onChange={e => setCovMethod(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
-                  <option value="sample_cov">Sample</option>
-                  <option value="ledoit_wolf">Ledoit-Wolf</option>
-                  <option value="oracle_approximating">Oracle Approx.</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: '#64748b' }}>Tau (BL): {tau}</label>
-                <input type="range" min="0.01" max="0.5" step="0.01" value={tau}
-                  onChange={e => setTau(parseFloat(e.target.value))} className="w-full mt-2 accent-cyan-400" />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: '#64748b' }}>Min poids %</label>
-                <input type="number" value={minWeight} onChange={e => setMinWeight(parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-lg text-sm"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }} />
-              </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: '#64748b' }}>Max poids %</label>
-                <input type="number" value={maxWeight} onChange={e => setMaxWeight(parseInt(e.target.value) || 25)}
-                  className="w-full px-3 py-2 rounded-lg text-sm"
-                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }} />
+            {/* Parameters */}
+            <div className="vc-card">
+              <div className="vc-card-title"><span className="title-icon">🎛️</span> Paramètres d'optimisation</div>
+              <div className="vc-config-grid">
+                <div className="vc-config-group">
+                  <div className="vc-config-group-title">Mode</div>
+                  <div className="vc-field">
+                    <label>Stratégie</label>
+                    <select value={isAuto ? 'auto' : 'manual'} onChange={e => setIsAuto(e.target.value === 'auto')}>
+                      <option value="auto">Auto — Sharpe maximum</option>
+                      <option value="manual">Manuel — Poids définis</option>
+                    </select>
+                  </div>
+                  <div className="vc-field">
+                    <label>Covariance</label>
+                    <select value={covMethod} onChange={e => setCovMethod(e.target.value)}>
+                      <option value="sample_cov">Sample Covariance</option>
+                      <option value="ledoit_wolf">Ledoit-Wolf Shrinkage</option>
+                      <option value="oracle_approximating">Oracle Approximating</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="vc-config-group">
+                  <div className="vc-config-group-title">Contraintes</div>
+                  <div className="vc-field">
+                    <label>Poids minimum (%)</label>
+                    <input type="number" value={minWeight} onChange={e => setMinWeight(parseInt(e.target.value) || 0)} />
+                  </div>
+                  <div className="vc-field">
+                    <label>Poids maximum (%)</label>
+                    <input type="number" value={maxWeight} onChange={e => setMaxWeight(parseInt(e.target.value) || 25)} />
+                  </div>
+                </div>
+
+                <div className="vc-config-group">
+                  <div className="vc-config-group-title">Black-Litterman</div>
+                  <div className="vc-field">
+                    <label>Tau (incertitude)</label>
+                    <div className="vc-range-wrapper">
+                      <input type="range" min="0.01" max="0.5" step="0.01" value={tau}
+                        onChange={e => setTau(parseFloat(e.target.value))} />
+                      <span className="vc-range-value">{tau.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* BL Views */}
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <label className="text-xs font-bold uppercase" style={{ color: '#64748b' }}>Vues Black-Litterman</label>
-                <button onClick={addView} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(0,212,255,0.1)', color: '#00d4ff' }}>+ Ajouter</button>
-              </div>
+            <div className="vc-card">
+              <div className="vc-card-title"><span className="title-icon">👁️</span> Vues Black-Litterman</div>
+              {views.length === 0 && (
+                <p style={{ fontSize: '0.78rem', color: '#475569', marginBottom: 12 }}>Aucune vue définie. Ajoutez des vues pour exprimer vos convictions.</p>
+              )}
               {views.map((v, i) => (
-                <div key={i} className="flex gap-2 mb-2 items-center flex-wrap">
-                  <select value={v.type} onChange={e => updateView(i, 'type', e.target.value)}
-                    className="px-2 py-1 rounded text-sm"
-                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
+                <div key={i} className="vc-views-row">
+                  <select value={v.type} onChange={e => updateView(i, 'type', e.target.value)}>
                     <option value="A">Absolue</option>
                     <option value="R">Relative</option>
                   </select>
                   {v.type === 'A' ? (
-                    <select value={v.asset ?? 0} onChange={e => updateView(i, 'asset', parseInt(e.target.value))}
-                      className="px-2 py-1 rounded text-sm"
-                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
+                    <select value={v.asset ?? 0} onChange={e => updateView(i, 'asset', parseInt(e.target.value))}>
                       {tickers.map((t, j) => <option key={j} value={j}>{t}</option>)}
                     </select>
                   ) : (
                     <>
-                      <select value={v.bull ?? 0} onChange={e => updateView(i, 'bull', parseInt(e.target.value))}
-                        className="px-2 py-1 rounded text-sm"
-                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
+                      <select value={v.bull ?? 0} onChange={e => updateView(i, 'bull', parseInt(e.target.value))}>
                         {tickers.map((t, j) => <option key={j} value={j}>{t} ↑</option>)}
                       </select>
-                      <select value={v.bear ?? 1} onChange={e => updateView(i, 'bear', parseInt(e.target.value))}
-                        className="px-2 py-1 rounded text-sm"
-                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
+                      <select value={v.bear ?? 1} onChange={e => updateView(i, 'bear', parseInt(e.target.value))}>
                         {tickers.map((t, j) => <option key={j} value={j}>{t} ↓</option>)}
                       </select>
                     </>
                   )}
                   <input type="number" value={v.value} onChange={e => updateView(i, 'value', parseFloat(e.target.value) || 0)}
-                    step="0.5" placeholder="Rendement %"
-                    className="w-20 px-2 py-1 rounded text-sm"
-                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#e2e8f0' }} />
-                  <button onClick={() => removeView(i)} style={{ color: '#ef4444' }}>✕</button>
+                    step="0.5" placeholder="Rdt %" style={{ width: 80 }} />
+                  <button className="vc-views-remove" onClick={() => removeView(i)}>✕</button>
                 </div>
               ))}
+              <button className="vc-views-add" onClick={addView}>+ Ajouter une vue</button>
             </div>
 
-            {/* Action Buttons */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* CTA Buttons */}
+            <div className="vc-cta-row no-print">
               <button onClick={analyze} disabled={loading || tickers.length === 0}
-                className="py-3 rounded-xl font-bold text-sm transition-all"
-                style={{
-                  background: loading ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #00d4ff, #0099cc)',
-                  color: loading ? '#64748b' : '#0a0e1a',
-                  cursor: loading ? 'not-allowed' : 'pointer'
-                }}>
+                className="vc-cta vc-cta-primary">
                 {loading ? '⟳ Analyse en cours...' : '▶ Analyser le portefeuille'}
               </button>
               <button onClick={generateOptimal} disabled={loading}
-                className="py-3 rounded-xl font-bold text-sm transition-all"
-                style={{
-                  background: loading ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #22c55e, #16a34a)',
-                  color: loading ? '#64748b' : '#0a0e1a',
-                  cursor: loading ? 'not-allowed' : 'pointer'
-                }}>
+                className="vc-cta vc-cta-secondary">
                 {loading ? '⟳ Génération...' : `✨ Portefeuille optimal — ${REGIONS.find(r => r.code === region)?.label}`}
               </button>
             </div>
-            {error && <p className="mt-3 text-sm text-center" style={{ color: '#ef4444' }}>{error}</p>}
+
+            {error && <div className="vc-error">{error}</div>}
           </div>
         )}
 
-        {/* Results */}
-        {result && p && !loading && (
-          <>
-            {/* Export PDF button */}
-            <div className="flex justify-end mb-4 no-print">
-              <button onClick={exportPDF}
-                className="px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2"
-                style={{ background: 'rgba(255,255,255,0.05)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)' }}>
-                📄 Exporter PDF
-              </button>
+        {/* ─── LOADER ─────────────────────────────────────── */}
+        {loading && (
+          <div className="vc-loader no-print">
+            <div className="vc-spinner"></div>
+            <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--vc-accent-cyan)' }}>Analyse en cours...</p>
+            <div style={{ width: 240 }}>
+              <div className="vc-skeleton" style={{ width: '80%' }}></div>
+              <div className="vc-skeleton" style={{ width: '60%' }}></div>
+              <div className="vc-skeleton" style={{ width: '90%' }}></div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── RESULTS TAB ────────────────────────────────── */}
+        {activeTab === 'results' && result && p && !loading && (
+          <div className="vc-page">
+            <div className="vc-section-header">
+              <h2>📊 Résultats</h2>
+              <p>Performance, allocation et évolution du portefeuille optimisé.</p>
             </div>
 
+            <div className="flex justify-end mb-4 no-print" style={{ marginBottom: 16 }}>
+              <button onClick={exportPDF} className="vc-export-btn">📄 Exporter PDF</button>
+            </div>
+
+            {/* Live Ticker Strip */}
+            {Object.keys(quotes).length > 0 && (
+              <div className="vc-ticker-strip no-print" ref={tickerRef}>
+                <div className="vc-ticker-scroll">
+                  {[...tickers, ...tickers].map((t, idx) => {
+                    const q = quotes[t];
+                    if (!q || !q.price) return null;
+                    const up = q.change_pct >= 0;
+                    return (
+                      <div key={`${t}-${idx}`} className="vc-ticker-item">
+                        <div className="vc-ticker-name">{t}</div>
+                        <div className="vc-ticker-price">{formatPrice(q.price, q.currency)}</div>
+                        <div className={`vc-ticker-change ${up ? 'up' : 'down'}`}>
+                          {up ? '▲' : '▼'} {q.change_pct.toFixed(2)}%
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6 kpi-grid">
+            <div className="vc-kpi-grid">
               {[
-                { label: 'Rendement Espéré', value: formatPct(p.expected_return), color: '#22c55e', icon: '📈' },
-                { label: 'Volatilité', value: formatPct(p.volatility), color: '#eab308', icon: '📊' },
-                { label: 'Ratio de Sharpe', value: p.sharpe.toFixed(3), color: '#00d4ff', icon: '⚡' },
-                { label: 'Beta', value: p.beta.toFixed(3), color: '#8b5cf6', icon: '🎯' },
-                { label: 'Alpha (Jensen)', value: formatPct(p.alpha), color: p.alpha >= 0 ? '#22c55e' : '#ef4444', icon: p.alpha >= 0 ? '✅' : '❌' },
+                { label: 'Rendement Espéré', value: p.expected_return * 100, decimals: 2, suffix: '%', colorClass: 'kpi-green', icon: '📈', color: '#22c55e' },
+                { label: 'Volatilité', value: p.volatility * 100, decimals: 2, suffix: '%', colorClass: 'kpi-yellow', icon: '📊', color: '#eab308' },
+                { label: 'Ratio de Sharpe', value: p.sharpe, decimals: 3, suffix: '', colorClass: 'kpi-cyan', icon: '⚡', color: '#00d4ff' },
+                { label: 'Beta', value: p.beta, decimals: 3, suffix: '', colorClass: 'kpi-purple', icon: '🎯', color: '#8b5cf6' },
+                { label: 'Alpha (Jensen)', value: p.alpha * 100, decimals: 2, suffix: '%', colorClass: p.alpha >= 0 ? 'kpi-green' : 'kpi-red', icon: p.alpha >= 0 ? '✅' : '❌', color: p.alpha >= 0 ? '#22c55e' : '#ef4444' },
               ].map(k => (
-                <div key={k.label} className="kpi-card rounded-xl p-4 text-center"
-                  style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div className="text-lg mb-1">{k.icon}</div>
-                  <div className="text-xs mb-1" style={{ color: '#64748b' }}>{k.label}</div>
-                  <div className="text-xl font-black" style={{ color: k.color }}>{k.value}</div>
+                <div key={k.label} className={`vc-kpi ${k.colorClass}`} style={{ '--vc-glow': k.color + '20' } as any}>
+                  <span className="vc-kpi-icon">{k.icon}</span>
+                  <div className="vc-kpi-label">{k.label}</div>
+                  <div className="vc-kpi-value" style={{ color: k.color }}>
+                    <AnimatedCounter value={k.value} decimals={k.decimals} suffix={k.suffix} />
+                  </div>
                 </div>
               ))}
             </div>
 
-            {/* Risk Cards */}
-            <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#ef4444' }}>⚠️ Risque — VaR & CVaR</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {[
-                  { label: 'VaR Paramétrique 99%', value: formatPct(p.var_99_pct) },
-                  { label: 'VaR Historique 99%', value: formatPct(p.var_historical) },
-                  { label: 'VaR Cornish-Fisher 99%', value: formatPct(p.var_cornish_fisher) },
-                  { label: 'CVaR Paramétrique', value: formatPct(p.cvar_parametric) },
-                  { label: 'CVaR Historique', value: formatPct(p.cvar_historical) },
-                  { label: 'CVaR Cornish-Fisher', value: formatPct(p.cvar_cornish_fisher) },
-                ].map(r => (
-                  <div key={r.label} className="p-3 rounded-lg" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
-                    <div className="text-xs" style={{ color: '#64748b' }}>{r.label}</div>
-                    <div className="text-lg font-bold" style={{ color: '#ef4444' }}>{r.value}</div>
-                  </div>
-                ))}
+            {/* Portfolio Evolution vs Benchmark — with scroll & brush */}
+            <div className="vc-card">
+              <div className="vc-card-title"><span className="title-icon">📈</span> Évolution vs Benchmark</div>
+              <div className="vc-chart-scroll">
+                <div style={{ minWidth: Math.max(600, mergedEvol.length * 2) }}>
+                  <ResponsiveContainer width="100%" height={380}>
+                    <LineChart data={mergedEvol}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis dataKey="Date" tick={{ fill: '#64748b', fontSize: 10 }} interval="preserveStartEnd"
+                        label={{ value: 'Date', position: 'bottom', fill: '#475569', fontSize: 10 }} />
+                      <YAxis tick={{ fill: '#64748b', fontSize: 10 }}
+                        label={{ value: 'Valeur', angle: -90, position: 'insideLeft', fill: '#475569', fontSize: 10 }} />
+                      <Tooltip contentStyle={chartTooltipStyle} />
+                      <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
+                      <Brush dataKey="Date" height={30} stroke="#00d4ff" fill="rgba(0,212,255,0.05)"
+                        tickFormatter={(v: string) => v?.slice(0, 7)} />
+                      {result.assets.map((a, i) => (
+                        <Line key={a} type="monotone" dataKey={a} stroke={COLORS[i % COLORS.length]} strokeWidth={1} dot={false} strokeOpacity={0.35} />
+                      ))}
+                      <Line type="monotone" dataKey="Portefeuille" stroke="#00d4ff" strokeWidth={3} dot={false} />
+                      <Line type="monotone" dataKey="Benchmark" stroke="#ffffff" strokeWidth={2} strokeDasharray="8 4" dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
 
-            {/* Portfolio Evolution vs Benchmark */}
-            <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>📈 Évolution du Portefeuille vs Benchmark</h2>
-              <ResponsiveContainer width="100%" height={380}>
-                <LineChart data={mergedEvol}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="Date" tick={{ fill: '#64748b', fontSize: 9 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
-                  <Tooltip contentStyle={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, color: '#e2e8f0' }} />
-                  <Legend />
-                  {result.assets.map((a, i) => (
-                    <Line key={a} type="monotone" dataKey={a} stroke={COLORS[i % COLORS.length]} strokeWidth={1} dot={false} strokeOpacity={0.35} />
-                  ))}
-                  <Line type="monotone" dataKey="Portefeuille" stroke="#00d4ff" strokeWidth={3} dot={false} />
-                  <Line type="monotone" dataKey="Benchmark" stroke="#ffffff" strokeWidth={2} strokeDasharray="8 4" dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
             {/* Efficient Frontier */}
-            <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>🎯 Frontière Efficiente</h2>
-              <ResponsiveContainer width="100%" height={350}>
-                <ScatterChart>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis type="number" dataKey="vol" name="Volatilité" tick={{ fill: '#64748b' }} unit="%" label={{ value: 'Volatilité (%)', position: 'bottom', fill: '#64748b' }} />
-                  <YAxis type="number" dataKey="ret" name="Rendement" tick={{ fill: '#64748b' }} unit="%" label={{ value: 'Rendement (%)', angle: -90, position: 'insideLeft', fill: '#64748b' }} />
-                  <Tooltip contentStyle={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, color: '#e2e8f0' }} />
-                  <Scatter data={efData} fill="#00d4ff" />
-                  {p && efData.length > 0 && (
-                    <Scatter data={[{ vol: p.volatility * 100, ret: p.expected_return * 100 }]} fill="#22c55e" />
-                  )}
-                </ScatterChart>
-              </ResponsiveContainer>
+            <div className="vc-card">
+              <div className="vc-card-title"><span className="title-icon">🎯</span> Frontière Efficiente</div>
+              <div className="vc-chart">
+                <ResponsiveContainer width="100%" height={350}>
+                  <ScatterChart>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <XAxis type="number" dataKey="vol" name="Volatilité" tick={{ fill: '#64748b', fontSize: 10 }} unit="%"
+                      label={{ value: 'Volatilité (%)', position: 'bottom', fill: '#475569', fontSize: 10 }} />
+                    <YAxis type="number" dataKey="ret" name="Rendement" tick={{ fill: '#64748b', fontSize: 10 }} unit="%"
+                      label={{ value: 'Rendement (%)', angle: -90, position: 'insideLeft', fill: '#475569', fontSize: 10 }} />
+                    <Tooltip contentStyle={chartTooltipStyle}
+                      formatter={(value: any, name: any) => [Number(value).toFixed(2) + '%', name]} />
+                    <Legend />
+                    <Scatter data={efData} fill="#00d4ff" name="Frontière" />
+                    {p && efData.length > 0 && (
+                      <Scatter data={[{ vol: p.volatility * 100, ret: p.expected_return * 100 }]} fill="#22c55e" name="Portefeuille optimal" />
+                    )}
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
-            {/* Weights — clickable for asset info modal */}
-            <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>⚖️ Poids Optimaux</h2>
-              <div className="space-y-3">
+            {/* Weights */}
+            <div className="vc-card">
+              <div className="vc-card-title"><span className="title-icon">⚖️</span> Poids Optimaux</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {result.assets.map((a, i) => {
                   const w = (result.weights[a] || 0) * 100;
                   const q = quotes[a];
+                  const rc = (result.risk_contribution?.[a] || 0) * 100;
                   return (
-                    <div key={a} className="flex items-center gap-3 cursor-pointer group" onClick={() => setSelectedAsset(a)}>
-                      <div className="w-24 flex items-center gap-2">
-                        <span className="text-sm font-bold group-hover:underline" style={{ color: COLORS[i % COLORS.length] }}>{a}</span>
-                        {q?.price && <span className="text-xs" style={{ color: '#64748b' }}>{q.price.toFixed(0)}</span>}
-                      </div>
-                      <div className="flex-1 h-7 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                        <div className="weight-bar h-full rounded-full flex items-center justify-end pr-2"
-                          style={{ width: `${w}%`, background: `linear-gradient(90deg, ${COLORS[i % COLORS.length]}33, ${COLORS[i % COLORS.length]})`, minWidth: w > 0 ? '24px' : '0' }}>
-                          <span className="text-xs font-bold" style={{ color: '#e2e8f0' }}>{w.toFixed(1)}%</span>
+                    <div key={a} className="vc-weight-row" onClick={() => setSelectedAsset(a)}>
+                      <div className="vc-weight-label" style={{ color: COLORS[i % COLORS.length] }}>{a}</div>
+                      <div className="vc-weight-bar-bg">
+                        <div className="vc-weight-bar-fill"
+                          style={{ width: `${w}%`, background: `linear-gradient(90deg, ${COLORS[i % COLORS.length]}33, ${COLORS[i % COLORS.length]})`, minWidth: w > 0 ? '30px' : '0' }}>
+                          <span>{w.toFixed(1)}%</span>
                         </div>
+                      </div>
+                      {/* Tooltip on hover */}
+                      <div className="vc-weight-tooltip">
+                        <strong>{a}</strong> — Poids: {w.toFixed(2)}%<br />
+                        Contribution risque: {rc.toFixed(2)}%
+                        {q?.price && <><br />Prix: {formatPrice(q.price, q.currency)}<br />Change: {q.change_pct >= 0 ? '+' : ''}{q.change_pct.toFixed(2)}%</>}
                       </div>
                     </div>
                   );
                 })}
               </div>
-              <p className="text-xs mt-3" style={{ color: '#475569' }}>Cliquez sur un ticker pour voir les détails</p>
+              <p style={{ fontSize: '0.68rem', color: '#475569', marginTop: 12 }}>Cliquez sur un ticker pour les détails</p>
             </div>
 
-            {/* Asset Info Modal */}
+            {/* Asset Modal */}
             {selectedAsset && selectedAssetInfo && (
-              <div className="asset-modal-overlay" onClick={() => setSelectedAsset(null)}>
-                <div className="asset-modal" onClick={e => e.stopPropagation()}>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-black" style={{ color: '#00d4ff' }}>{selectedAsset}</h3>
-                    <button onClick={() => setSelectedAsset(null)} className="text-lg" style={{ color: '#64748b' }}>✕</button>
+              <div className="vc-modal-overlay" onClick={() => setSelectedAsset(null)}>
+                <div className="vc-modal" onClick={e => e.stopPropagation()}>
+                  <div className="vc-modal-header">
+                    <h3>{selectedAsset}</h3>
+                    <button className="vc-modal-close" onClick={() => setSelectedAsset(null)}>✕</button>
                   </div>
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between"><span style={{ color: '#64748b' }}>Prix</span><span style={{ color: '#e2e8f0' }}>{formatPrice(selectedAssetInfo.price, selectedAssetInfo.currency)}</span></div>
-                    <div className="flex justify-between"><span style={{ color: '#64748b' }}>Change</span><span style={{ color: selectedAssetInfo.change_percent >= 0 ? '#22c55e' : '#ef4444' }}>{selectedAssetInfo.change_percent.toFixed(2)}%</span></div>
-                    <div className="flex justify-between"><span style={{ color: '#64748b' }}>P/E Ratio</span><span style={{ color: '#e2e8f0' }}>{selectedAssetInfo.pe_ratio != null ? selectedAssetInfo.pe_ratio.toFixed(1) : 'N/A'}</span></div>
-                    <div className="flex justify-between"><span style={{ color: '#64748b' }}>Dividend Yield</span><span style={{ color: '#e2e8f0' }}>{selectedAssetInfo.dividend_yield ? (selectedAssetInfo.dividend_yield * 100).toFixed(2) + '%' : 'N/A'}</span></div>
-                    <div className="flex justify-between"><span style={{ color: '#64748b' }}>Market Cap</span><span style={{ color: '#e2e8f0' }}>{selectedAssetInfo.mcap ? formatMcap(selectedAssetInfo.mcap) : 'N/A'}</span></div>
-                  </div>
+                  <div className="vc-modal-row"><span className="label">Prix</span><span className="value">{formatPrice(selectedAssetInfo.price, selectedAssetInfo.currency)}</span></div>
+                  <div className="vc-modal-row"><span className="label">Change</span><span className="value" style={{ color: selectedAssetInfo.change_percent >= 0 ? '#22c55e' : '#ef4444' }}>{selectedAssetInfo.change_percent >= 0 ? '+' : ''}{selectedAssetInfo.change_percent.toFixed(2)}%</span></div>
+                  <div className="vc-modal-row"><span className="label">P/E Ratio</span><span className="value">{selectedAssetInfo.pe_ratio != null ? selectedAssetInfo.pe_ratio.toFixed(1) : 'N/A'}</span></div>
+                  <div className="vc-modal-row"><span className="label">Dividend Yield</span><span className="value">{selectedAssetInfo.dividend_yield ? (selectedAssetInfo.dividend_yield * 100).toFixed(2) + '%' : 'N/A'}</span></div>
+                  <div className="vc-modal-row"><span className="label">Market Cap</span><span className="value">{selectedAssetInfo.mcap ? formatMcap(selectedAssetInfo.mcap) : 'N/A'}</span></div>
                 </div>
               </div>
             )}
 
             {/* Correlation Matrix */}
             {result.correlation_matrix && result.correlation_matrix.length > 0 && (
-              <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>🔢 Matrice de Corrélation</h2>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+              <div className="vc-card">
+                <div className="vc-card-title"><span className="title-icon">🔢</span> Matrice de Corrélation</div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="vc-corr-table">
                     <thead>
                       <tr>
-                        <th className="p-2" style={{ color: '#64748b' }}></th>
-                        {corrLabels.map(l => <th key={l} className="p-2" style={{ color: '#64748b' }}>{l}</th>)}
+                        <th></th>
+                        {corrLabels.map(l => <th key={l}>{l}</th>)}
                       </tr>
                     </thead>
                     <tbody>
                       {result.correlation_matrix.map((row, i) => (
                         <tr key={i}>
-                          <td className="p-2 font-bold" style={{ color: '#64748b' }}>{corrLabels[i]}</td>
+                          <td style={{ fontWeight: 700, color: '#64748b' }}>{corrLabels[i]}</td>
                           {row.map((v, j) => {
                             const abs = Math.abs(v);
-                            const bg = i === j ? 'rgba(0,212,255,0.15)' : v > 0 ? `rgba(0,212,255,${abs * 0.3})` : `rgba(239,68,68,${abs * 0.3})`;
-                            return <td key={j} className="p-2 text-center rounded" style={{ background: bg, color: '#e2e8f0' }}>{v.toFixed(2)}</td>;
+                            const bg = i === j ? 'rgba(0,212,255,0.12)' : v > 0 ? `rgba(0,212,255,${abs * 0.25})` : `rgba(239,68,68,${abs * 0.25})`;
+                            return <td key={j} style={{ background: bg }}>{v.toFixed(2)}</td>;
                           })}
                         </tr>
                       ))}
@@ -572,64 +620,175 @@ export default function App() {
 
             {/* Fama-French */}
             {ffData.length > 0 && (
-              <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>🧬 Exposition Fama-French 5 Facteurs</h2>
-                <ResponsiveContainer width="100%" height={300}>
-                  <RadarChart data={ffData}>
-                    <PolarGrid stroke="#1e293b" />
-                    <PolarAngleAxis dataKey="factor" tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <PolarRadiusAxis tick={{ fill: '#475569', fontSize: 9 }} />
-                    <Radar name="Exposition" dataKey="exposure" stroke="#00d4ff" fill="#00d4ff" fillOpacity={0.2} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-
-            {/* Walk-Forward Backtest */}
-            {wfResults.length > 0 && (
-              <div className="rounded-xl p-6 mb-6" style={{ background: 'rgba(15,20,35,0.8)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <h2 className="text-sm font-bold uppercase tracking-wider mb-4" style={{ color: '#00d4ff' }}>🔄 Walk-Forward Backtest</h2>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-                  {[
-                    { label: 'Rendement Moyen', value: formatPct(result.walk_forward_backtest.summary.avg_return), color: '#22c55e' },
-                    { label: 'Volatilité Moyenne', value: formatPct(result.walk_forward_backtest.summary.avg_volatility), color: '#eab308' },
-                    { label: 'Sharpe Moyen', value: result.walk_forward_backtest.summary.avg_sharpe.toFixed(3), color: '#00d4ff' },
-                    { label: 'VaR 99% Moyen', value: formatPct(result.walk_forward_backtest.summary.avg_var_99), color: '#ef4444' },
-                    { label: 'Max Drawdown', value: formatPct(result.walk_forward_backtest.summary.max_drawdown), color: '#ef4444' },
-                  ].map(s => (
-                    <div key={s.label} className="text-center p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                      <div className="text-xs" style={{ color: '#64748b' }}>{s.label}</div>
-                      <div className="text-lg font-bold" style={{ color: s.color }}>{s.value}</div>
-                    </div>
-                  ))}
+              <div className="vc-card">
+                <div className="vc-card-title"><span className="title-icon">🧬</span> Exposition Fama-French 5 Facteurs</div>
+                <div className="vc-chart">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RadarChart data={ffData}>
+                      <PolarGrid stroke="#1e293b" />
+                      <PolarAngleAxis dataKey="factor" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <PolarRadiusAxis tick={{ fill: '#475569', fontSize: 9 }} />
+                      <Radar name="Exposition" dataKey="exposure" stroke="#00d4ff" fill="#00d4ff" fillOpacity={0.15} strokeWidth={2} />
+                      <Tooltip contentStyle={chartTooltipStyle} />
+                    </RadarChart>
+                  </ResponsiveContainer>
                 </div>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={wfResults.map(r => ({
-                    period: r.period_start?.slice(0, 10) || '',
-                    return: r.return * 100,
-                    sharpe: r.sharpe
-                  }))}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                    <XAxis dataKey="period" tick={{ fill: '#64748b', fontSize: 9 }} />
-                    <YAxis tick={{ fill: '#64748b', fontSize: 10 }} />
-                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 8, color: '#e2e8f0' }} />
-                    <Bar dataKey="return" name="Rendement %" radius={[4, 4, 0, 0]}>
-                      {wfResults.map((r, i) => (
-                        <Cell key={i} fill={r.return >= 0 ? '#22c55e' : '#ef4444'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
               </div>
             )}
 
             {/* Footer */}
-            <div className="text-center py-4 text-xs" style={{ color: '#475569' }}>
-              Velocity Core v1.0 — Karl BAUJON — Black-Litterman · Markowitz · Fama-French
+            <div className="vc-footer no-print">
+              <div className="vc-footer-line1">Velocity Core v2.0 — Karl BAUJON</div>
+              <div className="vc-footer-line2">Black-Litterman · Markowitz · Fama-French · VaR/CVaR · Walk-Forward</div>
             </div>
-          </>
+          </div>
         )}
-      </div>
+
+        {/* ─── RISK TAB ──────────────────────────────────── */}
+        {activeTab === 'risk' && result && p && !loading && (
+          <div className="vc-page">
+            <div className="vc-section-header">
+              <h2>🛡️ Analyse de Risque</h2>
+              <p>VaR, CVaR et métriques de risque avancées.</p>
+            </div>
+
+            <div className="vc-card">
+              <div className="vc-card-title danger"><span className="title-icon">⚠️</span> VaR & CVaR</div>
+              <div className="vc-risk-grid">
+                {[
+                  { label: 'VaR Paramétrique 99%', value: p.var_99_pct },
+                  { label: 'VaR Historique 99%', value: p.var_historical },
+                  { label: 'VaR Cornish-Fisher 99%', value: p.var_cornish_fisher },
+                  { label: 'CVaR Paramétrique', value: p.cvar_parametric },
+                  { label: 'CVaR Historique', value: p.cvar_historical },
+                  { label: 'CVaR Cornish-Fisher', value: p.cvar_cornish_fisher },
+                ].map(r => {
+                  const isPositive = r.value >= 0;
+                  return (
+                    <div key={r.label} className={`vc-risk-item ${isPositive ? 'positive' : ''}`}>
+                      <div className="vc-risk-label">{r.label}</div>
+                      <div className={`vc-risk-value ${isPositive ? 'positive' : 'negative'}`}>
+                        <AnimatedCounter value={r.value * 100} decimals={2} suffix="%" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Risk contribution */}
+            {result.risk_contribution && (
+              <div className="vc-card">
+                <div className="vc-card-title"><span className="title-icon">📐</span> Contribution au Risque</div>
+                <div className="vc-chart">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={result.assets.map(a => ({
+                      name: a,
+                      contribution: (result.risk_contribution[a] || 0) * 100
+                    }))} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis type="number" tick={{ fill: '#64748b', fontSize: 10 }} unit="%"
+                        label={{ value: 'Contribution (%)', position: 'bottom', fill: '#475569', fontSize: 10 }} />
+                      <YAxis type="category" dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} width={70} />
+                      <Tooltip contentStyle={chartTooltipStyle} formatter={(v: any) => [Number(v).toFixed(2) + '%', 'Concession']} />
+                      <Bar dataKey="contribution" name="Contribution Risque" radius={[0, 6, 6, 0]}>
+                        {result.assets.map((_: any, i: number) => (
+                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            <div className="vc-footer no-print">
+              <div className="vc-footer-line1">Velocity Core v2.0 — Karl BAUJON</div>
+              <div className="vc-footer-line2">Analyse de risque quantitatif</div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── BACKTEST TAB ───────────────────────────────── */}
+        {activeTab === 'backtest' && result && p && !loading && (
+          <div className="vc-page">
+            <div className="vc-section-header">
+              <h2>🔄 Walk-Forward Backtest</h2>
+              <p>Validation hors-échantillon par fenêtres glissantes.</p>
+            </div>
+
+            {wfResults.length > 0 ? (
+              <>
+                <div className="vc-kpi-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+                  {[
+                    { label: 'Rendement Moyen', value: result.walk_forward_backtest.summary.avg_return * 100, suffix: '%', color: '#22c55e', colorClass: 'kpi-green', icon: '📈' },
+                    { label: 'Volatilité Moyenne', value: result.walk_forward_backtest.summary.avg_volatility * 100, suffix: '%', color: '#eab308', colorClass: 'kpi-yellow', icon: '📊' },
+                    { label: 'Sharpe Moyen', value: result.walk_forward_backtest.summary.avg_sharpe, suffix: '', color: '#00d4ff', colorClass: 'kpi-cyan', icon: '⚡' },
+                    { label: 'VaR 99% Moyen', value: result.walk_forward_backtest.summary.avg_var_99 * 100, suffix: '%', color: '#ef4444', colorClass: 'kpi-red', icon: '⚠️' },
+                    { label: 'Max Drawdown', value: result.walk_forward_backtest.summary.max_drawdown * 100, suffix: '%', color: '#ef4444', colorClass: 'kpi-red', icon: '📉' },
+                  ].map(s => (
+                    <div key={s.label} className={`vc-kpi ${s.colorClass}`} style={{ '--vc-glow': s.color + '20' } as any}>
+                      <span className="vc-kpi-icon">{s.icon}</span>
+                      <div className="vc-kpi-label">{s.label}</div>
+                      <div className="vc-kpi-value" style={{ color: s.color }}>
+                        <AnimatedCounter value={s.value} decimals={2} suffix={s.suffix} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="vc-card">
+                  <div className="vc-card-title"><span className="title-icon">📊</span> Rendement par période</div>
+                  <div className="vc-chart">
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart data={wfResults.map((r: any) => ({
+                        period: r.period_start?.slice(0, 10) || '',
+                        return: r.return * 100,
+                        sharpe: r.sharpe
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                        <XAxis dataKey="period" tick={{ fill: '#64748b', fontSize: 9 }}
+                          label={{ value: 'Période', position: 'bottom', fill: '#475569', fontSize: 10 }} />
+                        <YAxis tick={{ fill: '#64748b', fontSize: 10 }}
+                          label={{ value: 'Rendement (%)', angle: -90, position: 'insideLeft', fill: '#475569', fontSize: 10 }} />
+                        <Tooltip contentStyle={chartTooltipStyle}
+                          formatter={(v: any) => [Number(v).toFixed(2) + '%', 'Rendement']} />
+                        <Bar dataKey="return" name="Rendement %" radius={[6, 6, 0, 0]}>
+                          {wfResults.map((r: any, i: number) => (
+                            <Cell key={i} fill={r.return >= 0 ? '#22c55e' : '#ef4444'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="vc-card">
+                <p style={{ color: '#475569', fontSize: '0.85rem' }}>Aucun résultat de backtest disponible. Lancez une analyse d'abord.</p>
+              </div>
+            )}
+
+            <div className="vc-footer no-print">
+              <div className="vc-footer-line1">Velocity Core v2.0 — Karl BAUJON</div>
+              <div className="vc-footer-line2">Walk-Forward Out-of-Sample Validation</div>
+            </div>
+          </div>
+        )}
+
+        {/* Empty state for results/risk/backtest when no data */}
+        {['results', 'risk', 'backtest'].includes(activeTab) && !result && !loading && (
+          <div className="vc-page" style={{ textAlign: 'center', paddingTop: 80 }}>
+            <p style={{ fontSize: '2rem', marginBottom: 12 }}>📊</p>
+            <p style={{ fontSize: '1rem', fontWeight: 600, color: '#94a3b8' }}>Aucun résultat pour le moment</p>
+            <p style={{ fontSize: '0.82rem', color: '#475569', marginTop: 8 }}>Configurez vos actifs et lancez une analyse dans l'onglet Configuration.</p>
+            <button onClick={() => setActiveTab('config')} className="vc-cta vc-cta-primary" style={{ marginTop: 24, width: 'auto', display: 'inline-block' }}>
+              ⚙️ Aller à la configuration
+            </button>
+          </div>
+        )}
+
+      </main>
     </div>
   );
 }
