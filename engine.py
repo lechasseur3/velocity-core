@@ -398,9 +398,10 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
     # Optimization
     if is_auto:
         ef = EfficientFrontier(bl_returns, S)
-        # Add weight constraints
-        ef.add_constraint(lambda w: w >= min_weight)
-        ef.add_constraint(lambda w: w <= max_weight)
+        # Add weight constraints only if feasible for the number of assets
+        if n_assets >= 4 and min_weight * n_assets <= 1.0 and max_weight >= 1.0 / n_assets:
+            ef.add_constraint(lambda w: w >= min_weight)
+            ef.add_constraint(lambda w: w <= max_weight)
         ef.max_sharpe(risk_free_rate=rf)
         weights = ef.clean_weights()
     else:
