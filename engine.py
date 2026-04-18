@@ -308,14 +308,28 @@ def calculate_var_cornish_fisher(rp, confidence=0.99):
     var_value = -(rp.mean() - z_cf * rp.std())
     return max(0, var_value)
 
-def calculate_cvar(rp, confidence=0.99):
-    """
-    CVaR / Expected Shortfall : E[P&L | P&L < VaR]
-    Moyenne des pertes qui dépassent le VaR
-    """
+def calculate_cvar_parametric(rp, confidence=0.99):
+    """CVaR paramétrique (hypothèse normale)"""
+    z = stats.norm.ppf(confidence)
+    phi_z = stats.norm.pdf(z)
+    cvar = -(rp.mean() - (phi_z / (1 - confidence)) * rp.std())
+    return max(0, cvar)
+
+def calculate_cvar_historical(rp, confidence=0.99):
+    """CVaR historique : moyenne des pertes au-delà du VaR historique"""
     var_threshold = np.percentile(rp, (1 - confidence) * 100)
     cvar_value = -rp[rp <= var_threshold].mean()
     return max(0, cvar_value)
+
+def calculate_cvar_cornish_fisher(rp, confidence=0.99):
+    """CVaR Cornish-Fisher"""
+    z = stats.norm.ppf(confidence)
+    skewness = stats.skew(rp)
+    kurtosis = stats.kurtosis(rp)
+    z_cf = (z + (z**2 - 1) * skewness / 6 + (z**3 - 3*z) * kurtosis / 24 - (2*z**3 - 5*z) * skewness**2 / 36)
+    phi_z_cf = stats.norm.pdf(z_cf)
+    cvar = -(rp.mean() - (phi_z_cf / (1 - confidence)) * rp.std())
+    return max(0, cvar)
 
 def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='sample_cov', tau=0.05, min_weight=0.02, max_weight=0.25, benchmark='SPY', risk_free_rate=None):
     """
@@ -510,9 +524,9 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
     var_cornish_fisher = calculate_var_cornish_fisher(rp, confidence=0.99)
     
     # CVaR / Expected Shortfall pour les 3 méthodes
-    cvar_parametric = calculate_cvar(rp, confidence=0.99)
-    cvar_historical = calculate_cvar(rp, confidence=0.99)
-    cvar_cornish_fisher = calculate_cvar(rp, confidence=0.99)
+    cvar_parametric = calculate_cvar_parametric(rp, confidence=0.99)
+    cvar_historical = calculate_cvar_historical(rp, confidence=0.99)
+    cvar_cornish_fisher = calculate_cvar_cornish_fisher(rp, confidence=0.99)
     
     # Efficient Frontier
     vols, rets = [], []

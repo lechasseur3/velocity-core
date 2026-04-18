@@ -73,10 +73,10 @@ function formatMcap(v: number) {
 }
 
 const REGIONS = [
-  { code: 'US', label: '🇺🇸 USA', rf: 0.043 },
-  { code: 'EU', label: '🇪🇺 Europe', rf: 0.025 },
-  { code: 'FR', label: '🇫🇷 France', rf: 0.028 },
-  { code: 'ASIA', label: '🇯🇵 Asie', rf: 0.005 },
+  { code: 'US', label: '🇺🇸 USA', rf: 0.036 },
+  { code: 'EU', label: '🇪🇺 Europe', rf: 0.028 },
+  { code: 'FR', label: '🇫🇷 France', rf: 0.034 },
+  { code: 'ASIA', label: '🇯🇵 Asie', rf: 0.022 },
   { code: 'GLOBAL', label: '🌍 Mondial', rf: 0.035 },
 ];
 

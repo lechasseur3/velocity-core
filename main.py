@@ -93,12 +93,12 @@ async def optimal_portfolio(region: str = "US"):
     portfolios = {
         "US": ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "JPM", "UNH"],
         "EU": ["SAP.DE", "ASML.AS", "NESN.SW", "NOVN.SW", "MC.PA", "OR.PA", "SIE.DE", "SAN.PA"],
-        "FR": ["MC.PA", "OR.PA", "SAN.PA", "CAP.PA", "AI.PA", "RMS.PA", "BNP.PA", "ACA.PA"],
+        "FR": ["MC.PA", "OR.PA", "SAN.PA", "TTE.PA", "DG.PA", "RMS.PA", "BNP.PA", "CS.PA"],
         "ASIA": ["7203.T", "9984.T", "0005.HK", "2330.TW", "005930.KS", "BABA", "SE", "INFY"],
         "GLOBAL": ["AAPL", "MSFT", "NVDA", "SAP.DE", "ASML.AS", "MC.PA", "7203.T", "2330.TW"]
     }
     tickers = portfolios.get(region.upper(), portfolios["US"])
-    benchmarks = {"US": "SPY", "EU": "EZU", "FR": "EWQ", "ASIA": "AIA", "GLOBAL": "ACWI"}
+    benchmarks = {"US": "SPY", "EU": "EZU", "FR": "^FCHI", "ASIA": "AIA", "GLOBAL": "ACWI"}
     bm = benchmarks.get(region.upper(), "SPY")
     try:
         views_dict = []
