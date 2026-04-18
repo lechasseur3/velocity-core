@@ -130,6 +130,7 @@ export default function App() {
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const isLight = theme === 'light';
   const tickerRef = useRef<HTMLDivElement>(null);
 
   // Fetch real-time quotes
@@ -238,14 +239,17 @@ export default function App() {
   const wfResults = result?.walk_forward_backtest?.results || [];
   const selectedAssetInfo = selectedAsset && result?.assets_info?.[selectedAsset] ? result.assets_info[selectedAsset] : null;
 
-  // Tooltip formatters
+  // Theme-aware chart helpers
+  const gridStroke = isLight ? '#e5e7eb' : '#1e293b';
+  const axisFill = isLight ? '#374151' : '#64748b';
+  const labelFill = isLight ? '#6b7280' : '#475569';
   const chartTooltipStyle = {
-    background: theme === 'dark' ? 'rgba(10,14,26,0.95)' : 'rgba(255,255,255,0.97)',
-    border: theme === 'dark' ? '1px solid rgba(0,212,255,0.2)' : '1px solid rgba(0,0,0,0.1)',
-    borderRadius: 10,
-    color: theme === 'dark' ? '#e2e8f0' : '#1e293b',
+    background: isLight ? 'rgba(255,255,255,0.98)' : 'rgba(11,15,25,0.96)',
+    border: isLight ? '1px solid rgba(0,0,0,0.1)' : '1px solid rgba(201,168,76,0.2)',
+    borderRadius: 8,
+    color: isLight ? '#1a1a2e' : '#e8e8e8',
     fontSize: 12,
-    boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+    boxShadow: isLight ? '0 4px 16px rgba(0,0,0,0.08)' : '0 8px 24px rgba(0,0,0,0.4)',
   };
 
   const navItems = [
@@ -267,12 +271,12 @@ export default function App() {
       <aside className={`vc-sidebar ${sidebarOpen ? 'open' : ''}`}>
         {/* Theme toggle */}
         <button className="vc-theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title="Basculer mode clair/sombre">
-          {theme === 'dark' ? '☀️' : '🌙'}
+          {theme === 'dark' ? '☀' : '☾'}
         </button>
 
         <div className="vc-sidebar-logo">
-          <h1>⚡ VELOCITY</h1>
-          <p>Core Engine</p>
+          <h1>VELOCITY CORE</h1>
+          <p>Portfolio Optimization Engine</p>
         </div>
 
         <nav className="vc-nav">
@@ -287,8 +291,8 @@ export default function App() {
         </nav>
 
         {/* Region in sidebar */}
-        <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#475569', marginBottom: 8 }}>Région</div>
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--vc-sidebar-border)' }}>
+          <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--vc-accent-gold)', marginBottom: 8 }}>Région</div>
           <div className="vc-region-bar">
             {REGIONS.map(r => (
               <button key={r.code} onClick={() => setRegion(r.code)} className={`vc-region-btn ${region === r.code ? 'active' : ''}`}>
@@ -505,14 +509,14 @@ export default function App() {
                 <div style={{ minWidth: Math.max(600, mergedEvol.length * 2) }}>
                   <ResponsiveContainer width="100%" height={380}>
                     <LineChart data={mergedEvol}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                      <XAxis dataKey="Date" tick={{ fill: '#64748b', fontSize: 10 }} interval="preserveStartEnd"
-                        label={{ value: 'Date', position: 'bottom', fill: '#475569', fontSize: 10 }} />
-                      <YAxis tick={{ fill: '#64748b', fontSize: 10 }}
-                        label={{ value: 'Valeur', angle: -90, position: 'insideLeft', fill: '#475569', fontSize: 10 }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                      <XAxis dataKey="Date" tick={{ fill: axisFill, fontSize: 10 }} interval="preserveStartEnd"
+                        label={{ value: 'Date', position: 'bottom', fill: labelFill, fontSize: 10 }} />
+                      <YAxis tick={{ fill: axisFill, fontSize: 10 }}
+                        label={{ value: 'Valeur', angle: -90, position: 'insideLeft', fill: labelFill, fontSize: 10 }} />
                       <Tooltip contentStyle={chartTooltipStyle} />
                       <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
-                      <Brush dataKey="Date" height={30} stroke="#00d4ff" fill="rgba(0,212,255,0.05)"
+                      <Brush dataKey="Date" height={30} stroke={isLight ? '#b8941f' : '#c9a84c'} fill={isLight ? 'rgba(184,148,31,0.05)' : 'rgba(201,168,76,0.05)'}
                         tickFormatter={(v: string) => v?.slice(0, 7)} />
                       {result.assets.map((a, i) => (
                         <Line key={a} type="monotone" dataKey={a} stroke={COLORS[i % COLORS.length]} strokeWidth={1} dot={false} strokeOpacity={0.35} />
@@ -531,11 +535,11 @@ export default function App() {
               <div className="vc-chart">
                 <ResponsiveContainer width="100%" height={350}>
                   <ScatterChart>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                    <XAxis type="number" dataKey="vol" name="Volatilité" tick={{ fill: '#64748b', fontSize: 10 }} unit="%"
-                      label={{ value: 'Volatilité (%)', position: 'bottom', fill: '#475569', fontSize: 10 }} />
-                    <YAxis type="number" dataKey="ret" name="Rendement" tick={{ fill: '#64748b', fontSize: 10 }} unit="%"
-                      label={{ value: 'Rendement (%)', angle: -90, position: 'insideLeft', fill: '#475569', fontSize: 10 }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis type="number" dataKey="vol" name="Volatilité" tick={{ fill: axisFill, fontSize: 10 }} unit="%"
+                      label={{ value: 'Volatilité (%)', position: 'bottom', fill: labelFill, fontSize: 10 }} />
+                    <YAxis type="number" dataKey="ret" name="Rendement" tick={{ fill: axisFill, fontSize: 10 }} unit="%"
+                      label={{ value: 'Rendement (%)', angle: -90, position: 'insideLeft', fill: labelFill, fontSize: 10 }} />
                     <Tooltip contentStyle={chartTooltipStyle}
                       formatter={(value: any, name: any) => [Number(value).toFixed(2) + '%', name]} />
                     <Legend />
@@ -613,7 +617,7 @@ export default function App() {
                           <td style={{ fontWeight: 700, color: '#64748b' }}>{corrLabels[i]}</td>
                           {row.map((v, j) => {
                             const abs = Math.abs(v);
-                            const bg = i === j ? 'rgba(0,212,255,0.12)' : v > 0 ? `rgba(0,212,255,${abs * 0.25})` : `rgba(239,68,68,${abs * 0.25})`;
+                            const bg = i === j ? 'var(--vc-corr-self-bg)' : v > 0 ? `rgba(0,212,255,${abs * 0.2})` : `rgba(239,68,68,${abs * 0.2})`;
                             return <td key={j} style={{ background: bg }}>{v.toFixed(2)}</td>;
                           })}
                         </tr>
@@ -631,9 +635,9 @@ export default function App() {
                 <div className="vc-chart">
                   <ResponsiveContainer width="100%" height={300}>
                     <RadarChart data={ffData}>
-                      <PolarGrid stroke="#1e293b" />
-                      <PolarAngleAxis dataKey="factor" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                      <PolarRadiusAxis tick={{ fill: '#475569', fontSize: 9 }} />
+                      <PolarGrid stroke={gridStroke} />
+                      <PolarAngleAxis dataKey="factor" tick={{ fill: axisFill, fontSize: 11 }} />
+                      <PolarRadiusAxis tick={{ fill: labelFill, fontSize: 9 }} />
                       <Radar name="Exposition" dataKey="exposure" stroke="#00d4ff" fill="#00d4ff" fillOpacity={0.15} strokeWidth={2} />
                       <Tooltip contentStyle={chartTooltipStyle} />
                     </RadarChart>
@@ -692,10 +696,10 @@ export default function App() {
                       name: a,
                       contribution: (result.risk_contribution[a] || 0) * 100
                     }))} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                      <XAxis type="number" tick={{ fill: '#64748b', fontSize: 10 }} unit="%"
-                        label={{ value: 'Contribution (%)', position: 'bottom', fill: '#475569', fontSize: 10 }} />
-                      <YAxis type="category" dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} width={70} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                      <XAxis type="number" tick={{ fill: axisFill, fontSize: 10 }} unit="%"
+                        label={{ value: 'Contribution (%)', position: 'bottom', fill: labelFill, fontSize: 10 }} />
+                      <YAxis type="category" dataKey="name" tick={{ fill: isLight ? '#374151' : '#94a3b8', fontSize: 11 }} width={70} />
                       <Tooltip contentStyle={chartTooltipStyle} formatter={(v: any) => [Number(v).toFixed(2) + '%', 'Concession']} />
                       <Bar dataKey="contribution" name="Contribution Risque" radius={[0, 6, 6, 0]}>
                         {result.assets.map((_: any, i: number) => (
@@ -752,11 +756,11 @@ export default function App() {
                         return: r.return * 100,
                         sharpe: r.sharpe
                       }))}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="period" tick={{ fill: '#64748b', fontSize: 9 }}
-                          label={{ value: 'Période', position: 'bottom', fill: '#475569', fontSize: 10 }} />
-                        <YAxis tick={{ fill: '#64748b', fontSize: 10 }}
-                          label={{ value: 'Rendement (%)', angle: -90, position: 'insideLeft', fill: '#475569', fontSize: 10 }} />
+                        <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                        <XAxis dataKey="period" tick={{ fill: axisFill, fontSize: 9 }}
+                          label={{ value: 'Période', position: 'bottom', fill: labelFill, fontSize: 10 }} />
+                        <YAxis tick={{ fill: axisFill, fontSize: 10 }}
+                          label={{ value: 'Rendement (%)', angle: -90, position: 'insideLeft', fill: labelFill, fontSize: 10 }} />
                         <Tooltip contentStyle={chartTooltipStyle}
                           formatter={(v: any) => [Number(v).toFixed(2) + '%', 'Rendement']} />
                         <Bar dataKey="return" name="Rendement %" radius={[6, 6, 0, 0]}>
