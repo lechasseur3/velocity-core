@@ -151,7 +151,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [manualWeights] = useState<Record<string, string>>({});
+  const [manualWeights, setManualWeights] = useState<Record<string, string>>({});
   const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
   const [region, setRegion] = useState('US');
   const [activeTab, setActiveTab] = useState<'config' | 'results' | 'risk' | 'backtest'>('config');
@@ -419,6 +419,31 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* Manual Weights */}
+            {!isAuto && (
+              <div className="vc-card">
+                <div className="vc-card-title"><span className="title-icon">⚖</span> Poids manuels</div>
+                <div className="vc-config-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+                  {tickers.map(t => (
+                    <div key={t} className="vc-field">
+                      <label>{t} (%)</label>
+                      <input
+                        type="number"
+                        value={manualWeights[t] || ''}
+                        onChange={e => setManualWeights({ ...manualWeights, [t]: e.target.value })}
+                        placeholder="0"
+                        min="0"
+                        max="100"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: '0.72rem', color: 'var(--vc-text-muted)', marginTop: 8 }}>
+                  Les poids seront normalisés automatiquement (somme = 100%).
+                </p>
+              </div>
+            )}
 
             {/* BL Views */}
             <div className="vc-card">

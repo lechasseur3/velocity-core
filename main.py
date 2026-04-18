@@ -1,19 +1,22 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Optional
 import engine
 import yfinance as yf
+import time
 
 app = FastAPI(title="Portfolio Velocity API")
 
-# Enable CORS for frontend development
+# Enable CORS — restrict to known origins in production
+import os
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://178.104.125.12:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 class BLView(BaseModel):
@@ -23,20 +26,65 @@ class BLView(BaseModel):
     bear: Optional[int] = None
     value: float
 
+# Simple in-memory rate limiter (per-IP, 30 req/min)
+_rate_store: dict = {}
+RATE_LIMIT = 30
+RATE_WINDOW = 60
+
+def check_rate_limit(client_ip: str):
+    now = time.time()
+    if client_ip not in _rate_store:
+        _rate_store[client_ip] = []
+    _rate_store[client_ip] = [t for t in _rate_store[client_ip] if now - t < RATE_WINDOW]
+    if len(_rate_store[client_ip]) >= RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+    _rate_store[client_ip].append(now)
+
 class AnalysisRequest(BaseModel):
     symbols: List[str]
     views: List[BLView]
     is_auto: Optional[bool] = True
     manual_weights: Optional[dict] = None
-    cov_method: Optional[str] = "sample_cov"  # 'sample_cov' | 'ledoit_wolf' | 'oracle_approximating'
+    cov_method: Optional[str] = "sample_cov"
     tau: Optional[float] = 0.05
     min_weight: Optional[float] = 0.02
     max_weight: Optional[float] = 0.25
     benchmark: Optional[str] = "SPY"
     risk_free_rate: Optional[float] = None
 
+    @field_validator('symbols')
+    @classmethod
+    def validate_symbols(cls, v):
+        if not v or len(v) < 2:
+            raise ValueError('At least 2 symbols required')
+        if len(v) > 30:
+            raise ValueError('Maximum 30 symbols allowed')
+        return [s.upper().strip() for s in v]
+
+    @field_validator('cov_method')
+    @classmethod
+    def validate_cov(cls, v):
+        if v not in ('sample_cov', 'ledoit_wolf', 'oracle_approximating'):
+            raise ValueError('Invalid cov_method')
+        return v
+
+    @field_validator('tau')
+    @classmethod
+    def validate_tau(cls, v):
+        if v < 0.001 or v > 1.0:
+            raise ValueError('tau must be between 0.001 and 1.0')
+        return v
+
+    @field_validator('min_weight', 'max_weight')
+    @classmethod
+    def validate_weights(cls, v):
+        if v < 0 or v > 1.0:
+            raise ValueError('Weight must be between 0 and 1.0')
+        return v
+
 @app.post("/analyze")
-async def analyze(request: AnalysisRequest):
+async def analyze(request: AnalysisRequest, req: Request):
+    check_rate_limit(req.client.host if req.client else "unknown")
     try:
         # Convert Pydantic models to dicts for the engine
         views_dict = [v.dict() for v in request.views]
@@ -59,7 +107,8 @@ async def analyze(request: AnalysisRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/quotes")
-async def quotes(symbols: str):
+async def quotes(symbols: str, req: Request):
+    check_rate_limit(req.client.host if req.client else "unknown")
     """
     Real-time quotes for comma-separated tickers.
     Returns {ticker: {price, change_pct, currency, name}}.
@@ -80,12 +129,14 @@ async def quotes(symbols: str):
                 "currency": info.get("currency", "USD"),
                 "name": info.get("shortName", info.get("longName", t))
             }
-        except:
+        except Exception as e:
             result[t] = {"price": 0, "change_pct": 0, "currency": "USD", "name": t}
     return result
 
 @app.get("/optimal-portfolio")
-async def optimal_portfolio(region: str = "US"):
+async def optimal_portfolio(region: str = "US", req: Request = None):
+    if req:
+        check_rate_limit(req.client.host if req.client else "unknown")
     """
     Generate a diversified optimal portfolio based on region.
     Regions: US, EU, FR, ASIA, GLOBAL

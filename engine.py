@@ -45,11 +45,11 @@ def fetch_stock_data(ticker):
         try:
             dp = info.get('regularMarketChangePercent', 0)
             info_dict['change_percent'] = float(dp) if dp is not None else 0.0
-        except: pass
+        except Exception as e: print(f"Warning: {e}")
         
         try:
             info_dict['total_debt'] = stock.balance_sheet.loc['Total Debt'].iloc[0]
-        except: pass
+        except Exception as e: print(f"Warning: {e}")
         
     except ValueError as e:
         raise ValueError(f"Data validation failed for {ticker}: {e}")
@@ -126,12 +126,20 @@ def get_portfolio_data(symbols, period="5y", use_cache=True):
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         future_to_ticker = {executor.submit(fetch_stock_data, t): t for t in symbols}
         for future in concurrent.futures.as_completed(future_to_ticker):
-            res = future.result()
-            t = res['ticker']
-            mcaps[t] = res['mcap']
-            debts[t] = res['total_debt']
-            currencies[t] = res['currency']
-            assets_info[t] = res
+            try:
+                res = future.result()
+                t = res['ticker']
+                mcaps[t] = res['mcap']
+                debts[t] = res['total_debt']
+                currencies[t] = res['currency']
+                assets_info[t] = res
+            except Exception as e:
+                failed_ticker = future_to_ticker[future]
+                print(f"Warning: failed to fetch data for {failed_ticker}: {e}")
+                mcaps[failed_ticker] = 1e9
+                debts[failed_ticker] = 0
+                currencies[failed_ticker] = 'USD'
+                assets_info[failed_ticker] = {'ticker': failed_ticker, 'mcap': 1e9, 'total_debt': 0, 'currency': 'USD', 'price': 0, 'change_percent': 0, 'pe_ratio': None, 'dividend_yield': 0}
             
     fetched_symbols = df.columns.tolist()
     unique_currencies = set([currencies.get(s, 'USD') for s in fetched_symbols]) - {'USD'}
@@ -202,22 +210,15 @@ def walk_forward_backtest(returns_df, symbols, rf, start_date=None, train_days=2
         test_end = train_end + test_days
         test_returns = returns_df.iloc[test_start:test_end]
         
-        # Optimize on training data
+        # Optimize on training data — no YF calls (avoid look-ahead bias)
         S_train = risk_models.sample_cov(train_returns)
         
-        # Get market caps from Yahoo Finance
         try:
-            tickers = yf.Tickers(symbols)
-            info = tickers.info
-            mcaps = {s: info[s].get('marketCap', 1e9) for s in symbols}
-            
-            # Black-Litterman with default views (market equilibrium)
             bl_returns = expected_returns.capm_return(train_returns, risk_free_rate=rf)
-            
             ef = EfficientFrontier(bl_returns, S_train)
             ef.max_sharpe(risk_free_rate=rf)
             weights = ef.clean_weights()
-        except:
+        except Exception as e:
             # Fallback: equal weights
             weights = {s: 1.0/len(symbols) for s in symbols}
         
@@ -322,14 +323,15 @@ def calculate_cvar_historical(rp, confidence=0.99):
     return max(0, cvar_value)
 
 def calculate_cvar_cornish_fisher(rp, confidence=0.99):
-    """CVaR Cornish-Fisher"""
+    """CVaR Cornish-Fisher : moyenne des pertes au-delà du VaR CF ajusté"""
     z = stats.norm.ppf(confidence)
     skewness = stats.skew(rp)
     kurtosis = stats.kurtosis(rp)
     z_cf = (z + (z**2 - 1) * skewness / 6 + (z**3 - 3*z) * kurtosis / 24 - (2*z**3 - 5*z) * skewness**2 / 36)
-    phi_z_cf = stats.norm.pdf(z_cf)
-    cvar = -(rp.mean() - (phi_z_cf / (1 - confidence)) * rp.std())
-    return max(0, cvar)
+    # VaR CF en quantile empirique
+    var_cf_threshold = np.percentile(rp, stats.norm.cdf(z_cf) * 100)
+    cvar_value = -rp[rp <= var_cf_threshold].mean()
+    return max(0, cvar_value) if not np.isnan(cvar_value) else 0
 
 def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='sample_cov', tau=0.05, min_weight=0.02, max_weight=0.25, benchmark='SPY', risk_free_rate=None):
     """
@@ -354,7 +356,7 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
             rf_data = yf.Ticker('^IRX').history(period='5d')['Close']
             rf = rf_data.dropna().mean() / 100 if not rf_data.empty else 0.04
             if np.isnan(rf): rf = 0.04
-        except:
+        except Exception as e:
             rf = 0.04
 
     # DATA ALIGNMENT: Ensure symbols match the fetched data
@@ -483,7 +485,7 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
         else:
             benchmark_evolution = []
             
-    except:
+    except Exception as e:
         beta = 1.0
         benchmark_evolution = []
     
@@ -498,7 +500,7 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
             market_return = (1 + total_return) ** (1/years) - 1 if years > 0 else 0.12
         else:
             market_return = 0.12
-    except:
+    except Exception as e:
         market_return = 0.12
     
     alpha = perf[0] - (rf + beta * (market_return - rf))
@@ -539,8 +541,8 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
                     ef_t.efficient_return(t)
                     r, v, _ = ef_t.portfolio_performance()
                     rets.append(float(r)); vols.append(float(v))
-                except: pass
-    except: pass
+                except Exception as e: print(f"Warning: FF: {e}")
+    except Exception as e: print(f"Warning: analysis: {e}")
 
     corr_matrix = returns_df[fetched_symbols].corr().round(3).values.tolist()
     
