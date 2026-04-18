@@ -101,8 +101,8 @@ def get_portfolio_data(symbols, period="5y", use_cache=True):
         cached = cache_get(cache_key)
         if cached is not None:
             df = pd.DataFrame(cached["prices"])
-            if "date" in df.columns:
-                df = df.set_index("date")
+            if 'Date' in df.columns:
+                df = df.set_index('Date')
             df.index = pd.to_datetime(df.index)
             return df, cached["mcaps"], cached["debts"], cached["assets_info"]
     
@@ -153,7 +153,7 @@ def get_portfolio_data(symbols, period="5y", use_cache=True):
     # Cache the result
     if use_cache:
         cache_data = {
-            "prices": df.to_dict(orient="split"),
+            "prices": df.reset_index().assign(Date=df.reset_index()['Date'].astype(str)).to_dict(orient='records'),
             "mcaps": mcaps,
             "debts": debts,
             "assets_info": assets_info
@@ -222,8 +222,8 @@ def walk_forward_backtest(returns_df, symbols, rf, start_date=None, train_days=2
             weights = {s: 1.0/len(symbols) for s in symbols}
         
         weights_history.append({
-            'period_start': dates[idx],
-            'period_end': dates[train_end-1],
+            'period_start': str(dates[idx]),
+            'period_end': str(dates[train_end-1]),
             'weights': weights
         })
         
@@ -241,8 +241,8 @@ def walk_forward_backtest(returns_df, symbols, rf, start_date=None, train_days=2
             test_var = -np.percentile(test_rp, 1)  # 99% VaR
             
             results.append({
-                'period_start': dates[test_start],
-                'period_end': dates[min(test_end-1, len(dates)-1)],
+                'period_start': str(dates[test_start]),
+                'period_end': str(dates[min(test_end-1, len(dates)-1)]),
                 'return': test_return,
                 'volatility': test_volatility,
                 'sharpe': test_sharpe,
@@ -459,7 +459,9 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
             bench_aligned = bench_aligned / bench_aligned.iloc[0] * 100
             
             # Format to dicts
-            benchmark_evolution = pd.DataFrame({'Date': common_idx, benchmark: bench_aligned.values}).to_dict(orient='records')
+            benchmark_evolution = pd.DataFrame({'Date': common_idx, benchmark: bench_aligned.values})
+            benchmark_evolution['Date'] = benchmark_evolution['Date'].astype(str)
+            benchmark_evolution = benchmark_evolution.to_dict(orient='records')
         else:
             benchmark_evolution = []
             
@@ -546,9 +548,9 @@ def run_analysis(symbols, views, is_auto=True, manual_weights=None, cov_method='
             "cvar_cornish_fisher": float(cvar_cornish_fisher)
         },
         "risk_contribution": (w_series * (S @ w_series) / (perf[1]**2 if perf[1] > 1e-6 else 1.0)).to_dict(),
-        "historical_evolution": df100.reset_index().to_dict(orient='records'),
+        "historical_evolution": df100.reset_index().assign(Date=df100.reset_index()['Date'].astype(str)).to_dict(orient='records'),
         "benchmark_evolution": benchmark_evolution,
-        "daily_returns": returns_df.reset_index().to_dict(orient='records'),
+        "daily_returns": returns_df.reset_index().assign(Date=returns_df.reset_index().index.astype(str) if 'Date' not in returns_df.reset_index().columns else returns_df.reset_index()['Date'].astype(str)).to_dict(orient='records'),
         "efficient_frontier": {"vols": vols, "rets": rets},
         "correlation_matrix": corr_matrix,
         "assets": fetched_symbols,
