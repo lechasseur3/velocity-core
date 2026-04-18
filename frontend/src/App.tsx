@@ -129,6 +129,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'config' | 'results' | 'risk' | 'backtest'>('config');
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const tickerRef = useRef<HTMLDivElement>(null);
 
   // Fetch real-time quotes
@@ -239,12 +240,12 @@ export default function App() {
 
   // Tooltip formatters
   const chartTooltipStyle = {
-    background: 'rgba(10,14,26,0.95)',
-    border: '1px solid rgba(0,212,255,0.2)',
+    background: theme === 'dark' ? 'rgba(10,14,26,0.95)' : 'rgba(255,255,255,0.97)',
+    border: theme === 'dark' ? '1px solid rgba(0,212,255,0.2)' : '1px solid rgba(0,0,0,0.1)',
     borderRadius: 10,
-    color: '#e2e8f0',
+    color: theme === 'dark' ? '#e2e8f0' : '#1e293b',
     fontSize: 12,
-    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+    boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
   };
 
   const navItems = [
@@ -255,7 +256,7 @@ export default function App() {
   ];
 
   return (
-    <div className="vc-layout">
+    <div className={`vc-layout ${theme === 'light' ? 'vc-light' : ''}`}>
       {/* Mobile sidebar overlay */}
       <div className={`vc-sidebar-overlay ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} />
 
@@ -264,6 +265,11 @@ export default function App() {
 
       {/* ─── Sidebar ─────────────────────────────────────── */}
       <aside className={`vc-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        {/* Theme toggle */}
+        <button className="vc-theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title="Basculer mode clair/sombre">
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+
         <div className="vc-sidebar-logo">
           <h1>⚡ VELOCITY</h1>
           <p>Core Engine</p>
