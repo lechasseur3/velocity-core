@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import './App.css';
 
-const COLORS = ['#00d4ff', '#8b5cf6', '#22c55e', '#eab308', '#ef4444', '#f97316', '#ec4899', '#06b6d4', '#a855f7', '#84cc16'];
+const COLORS = ['#c9a84c', '#8b5cf6', '#22c55e', '#eab308', '#ef4444', '#f97316', '#ec4899', '#06b6d4', '#a855f7', '#84cc16'];
 
 interface AssetInfo {
   ticker: string;
@@ -159,6 +159,10 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const isLight = theme === 'light';
+  const isLight = theme === 'light';
+  const colors = isLight
+    ? ['#b8941f', '#7c3aed', '#16a34a', '#ca8a04', '#dc2626', '#ea580c', '#db2777', '#0891b2', '#9333ea', '#65a30d']
+    : COLORS;
   const tickerRef = useRef<HTMLDivElement>(null);
 
   // Fetch real-time quotes
@@ -514,11 +518,11 @@ export default function App() {
             {/* KPI Cards */}
             <div className="vc-kpi-grid">
               {[
-                { label: 'Rendement Espéré', value: p.expected_return * 100, decimals: 2, suffix: '%', color: '#22c55e', icon: '▸' },
-                { label: 'Volatilité', value: p.volatility * 100, decimals: 2, suffix: '%', color: '#eab308', icon: '◆' },
-                { label: 'Ratio de Sharpe', value: p.sharpe, decimals: 3, suffix: '', color: '#00d4ff', icon: '⚡' },
-                { label: 'Beta', value: p.beta, decimals: 3, suffix: '', color: '#8b5cf6', icon: '●' },
-                { label: 'Alpha (Jensen)', value: p.alpha * 100, decimals: 2, suffix: '%', color: p.alpha >= 0 ? '#22c55e' : '#ef4444', icon: p.alpha >= 0 ? '◈' : '◈' },
+                { label: 'Rendement Espéré', value: p.expected_return * 100, decimals: 2, suffix: '%', color: isLight ? '#16a34a' : '#22c55e', icon: '▸' },
+                { label: 'Volatilité', value: p.volatility * 100, decimals: 2, suffix: '%', color: isLight ? '#ca8a04' : '#eab308', icon: '◆' },
+                { label: 'Ratio de Sharpe', value: p.sharpe, decimals: 3, suffix: '', color: isLight ? '#b8941f' : '#c9a84c', icon: '⚡' },
+                { label: 'Beta', value: p.beta, decimals: 3, suffix: '', color: isLight ? '#7c3aed' : '#8b5cf6', icon: '●' },
+                { label: 'Alpha (Jensen)', value: p.alpha * 100, decimals: 2, suffix: '%', color: p.alpha >= 0 ? (isLight ? '#16a34a' : '#22c55e') : (isLight ? '#dc2626' : '#ef4444'), icon: '◈' },
               ].map(k => (
                 <div key={k.label} className="vc-kpi" style={{ '--vc-glow': k.color + '20' } as any}>
                   <span className="vc-kpi-icon">{k.icon}</span>
@@ -547,7 +551,7 @@ export default function App() {
                       <Brush dataKey="Date" height={30} stroke={isLight ? '#b8941f' : '#c9a84c'} fill={isLight ? 'rgba(184,148,31,0.05)' : 'rgba(201,168,76,0.05)'}
                         tickFormatter={(v: string) => v?.slice(0, 7)} />
                       {result.assets.map((a, i) => (
-                        <Line key={a} type="monotone" dataKey={a} stroke={COLORS[i % COLORS.length]} strokeWidth={1} dot={false} strokeOpacity={0.35} />
+                        <Line key={a} type="monotone" dataKey={a} stroke={colors[i % colors.length]} strokeWidth={1} dot={false} strokeOpacity={0.35} />
                       ))}
                       <Line type="monotone" dataKey="Portefeuille" stroke={isLight ? '#b8941f' : '#c9a84c'} strokeWidth={3} dot={false} />
                       <Line type="monotone" dataKey="Benchmark" stroke={isLight ? '#4a4a6a' : '#94a3b8'} strokeWidth={2} strokeDasharray="8 4" dot={false} />
@@ -573,7 +577,7 @@ export default function App() {
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     <Scatter data={efData} fill={isLight ? '#b8941f' : '#c9a84c'} name="Frontière" />
                     {p && efData.length > 0 && (
-                      <Scatter data={[{ vol: p.volatility * 100, ret: p.expected_return * 100 }]} fill="#22c55e" name="Portefeuille optimal" />
+                      <Scatter data={[{ vol: p.volatility * 100, ret: p.expected_return * 100 }]} fill={isLight ? '#16a34a' : '#22c55e'} name="Portefeuille optimal" />
                     )}
                   </ScatterChart>
                 </ResponsiveContainer>
@@ -593,10 +597,10 @@ export default function App() {
                   const isNarrow = w < 15;
                   return (
                     <div key={a} className="vc-weight-row" onClick={() => setSelectedAsset(a)}>
-                      <div className="vc-weight-label" style={{ color: COLORS[i % COLORS.length] }}>{a}</div>
+                      <div className="vc-weight-label" style={{ color: colors[i % colors.length] }}>{a}</div>
                       <div className="vc-weight-bar-bg">
                         <div className={`vc-weight-bar-fill ${isNarrow ? 'vc-bar-narrow' : ''}`}
-                          style={{ width: `${Math.max(w, 2)}%`, background: `linear-gradient(90deg, ${COLORS[i % COLORS.length]}44, ${COLORS[i % COLORS.length]})` }}>
+                          style={{ width: `${Math.max(w, 2)}%`, background: `linear-gradient(90deg, ${colors[i % colors.length]}44, ${colors[i % colors.length]})` }}>
                           <span>{w.toFixed(1)}%</span>
                         </div>
                       </div>
@@ -647,7 +651,7 @@ export default function App() {
                           <td style={{ fontWeight: 700, color: 'var(--vc-text-muted)' }}>{corrLabels[i]}</td>
                           {row.map((v, j) => {
                             const abs = Math.abs(v);
-                            const bg = i === j ? 'var(--vc-corr-self-bg)' : v > 0 ? `rgba(0,212,255,${abs * 0.2})` : `rgba(239,68,68,${abs * 0.2})`;
+                            const bg = i === j ? 'var(--vc-corr-self-bg)' : v > 0 ? `rgba(${isLight ? '0,100,200' : '0,212,255'},${abs * (isLight ? 0.15 : 0.2)})` : `rgba(${isLight ? '180,30,30' : '239,68,68'},${abs * (isLight ? 0.12 : 0.2)})`;
                             return <td key={j} style={{ background: bg }}>{v.toFixed(2)}</td>;
                           })}
                         </tr>
@@ -668,7 +672,7 @@ export default function App() {
                       <PolarGrid stroke={gridStroke} />
                       <PolarAngleAxis dataKey="factor" tick={{ fill: axisFill, fontSize: 11 }} />
                       <PolarRadiusAxis tick={{ fill: labelFill, fontSize: 9 }} />
-                      <Radar name="Exposition" dataKey="exposure" stroke={isLight ? '#b8941f' : '#00d4ff'} fill={isLight ? '#b8941f' : '#00d4ff'} fillOpacity={0.15} strokeWidth={2} />
+                      <Radar name="Exposition" dataKey="exposure" stroke={isLight ? '#b8941f' : '#c9a84c'} fill={isLight ? '#b8941f' : '#c9a84c'} fillOpacity={0.15} strokeWidth={2} />
                       <Tooltip contentStyle={chartTooltipStyle} />
                     </RadarChart>
                   </ResponsiveContainer>
@@ -736,7 +740,7 @@ export default function App() {
                       <Tooltip contentStyle={chartTooltipStyle} formatter={(v: any) => [Number(v).toFixed(2) + '%', 'Contribution']} />
                       <Bar dataKey="contribution" name="Contribution Risque" radius={[0, 6, 6, 0]}>
                         {result.assets.map((_: any, i: number) => (
-                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                          <Cell key={i} fill={colors[i % colors.length]} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -768,11 +772,11 @@ export default function App() {
               <>
                 <div className="vc-kpi-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
                   {[
-                    { label: 'Rendement Moyen', value: result.walk_forward_backtest.summary.avg_return * 100, suffix: '%', color: '#22c55e', icon: '▸' },
-                    { label: 'Volatilité Moyenne', value: result.walk_forward_backtest.summary.avg_volatility * 100, suffix: '%', color: '#eab308', icon: '◆' },
-                    { label: 'Sharpe Moyen', value: result.walk_forward_backtest.summary.avg_sharpe, suffix: '', color: '#00d4ff', icon: '⚡' },
-                    { label: 'VaR 99% Moyen', value: result.walk_forward_backtest.summary.avg_var_99 * 100, suffix: '%', color: '#ef4444', icon: '●' },
-                    { label: 'Max Drawdown', value: result.walk_forward_backtest.summary.max_drawdown * 100, suffix: '%', color: '#ef4444', icon: '◈' },
+                    { label: 'Rendement Moyen', value: result.walk_forward_backtest.summary.avg_return * 100, suffix: '%', color: isLight ? '#16a34a' : '#22c55e', icon: '▸' },
+                    { label: 'Volatilité Moyenne', value: result.walk_forward_backtest.summary.avg_volatility * 100, suffix: '%', color: isLight ? '#ca8a04' : '#eab308', icon: '◆' },
+                    { label: 'Sharpe Moyen', value: result.walk_forward_backtest.summary.avg_sharpe, suffix: '', color: isLight ? '#b8941f' : '#c9a84c', icon: '⚡' },
+                    { label: 'VaR 99% Moyen', value: result.walk_forward_backtest.summary.avg_var_99 * 100, suffix: '%', color: isLight ? '#dc2626' : '#ef4444', icon: '●' },
+                    { label: 'Max Drawdown', value: result.walk_forward_backtest.summary.max_drawdown * 100, suffix: '%', color: isLight ? '#dc2626' : '#ef4444', icon: '◈' },
                   ].map(s => (
                     <div key={s.label} className="vc-kpi" style={{ '--vc-glow': s.color + '20' } as any}>
                       <span className="vc-kpi-icon">{s.icon}</span>
@@ -800,7 +804,7 @@ export default function App() {
                           formatter={(v: any) => [Number(v).toFixed(2) + '%', 'Rendement']} />
                         <Bar dataKey="return" name="Rendement %" radius={[6, 6, 0, 0]}>
                           {wfResults.map((r: any, i: number) => (
-                            <Cell key={i} fill={r.return >= 0 ? '#22c55e' : '#ef4444'} />
+                            <Cell key={i} fill={r.return >= 0 ? (isLight ? '#16a34a' : '#22c55e') : (isLight ? '#dc2626' : '#ef4444')} />
                           ))}
                         </Bar>
                       </BarChart>
