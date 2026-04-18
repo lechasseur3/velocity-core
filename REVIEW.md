@@ -122,10 +122,10 @@ Chaque scénario calcule : VaR 99%, CVaR 99%, max drawdown, perte en €, durée
 
 | Scénario | VaR 99% | CVaR 99% | Max DD | Perte estimée |
 |----------|---------|----------|--------|--------------|
-| Crash 2008 | ~42% | ~52% | 34% | 40 000 € |
-| Hausse taux | ~18% | ~22% | 11% | 15 000 € |
-| Stagflation | ~30% | ~37% | 19% | 25 000 € |
-| Black Swan | ~63% | ~78% | 57% | 60 000 € |
+| Crash 2008 | 62% | 78% | 34% | 40 000 € |
+| Hausse taux | 39% | 49% | 11% | 15 000 € |
+| Stagflation | 38% | 48% | 19% | 25 000 € |
+| Black Swan | 95% | 99% | 57% | 60 000 € |
 
 ---
 

@@ -81,14 +81,24 @@ def stress_var(
 
     z = stats.norm.ppf(confidence)
 
-    # VaR paramétrique sur l'horizon T
-    var_scenario = -(total_return_shocked - z * vol_over_period)
-    var_scenario = max(0, min(var_scenario, 1.0))
+    # VaR 99% stressée : perte attendue + contribution vol sur la période
+    # Approche standard : VaR_T = |μ_T| + z_99 * σ_T
+    mu_period = total_return_shocked  # déjà négatif
+    sigma_period = vol_over_period
+    # VaR 99% stressée
+    # On calcule la VaR sur un horizon max de 63 jours (3 mois) pour rester lisible
+    # puis on annualise le ratio si la période est plus longue
+    var_horizon = min(T, 63)
+    sigma_var = vol_stressed * np.sqrt(var_horizon / 252)
+    # Perte attendue pro-rata sur l'horizon VaR
+    mu_var = total_return_shocked * (var_horizon / T)
+    var_scenario = abs(mu_var) + z * sigma_var
+    # Mais on s'assure que la VaR ≥ perte attendue totale (worst case)
+    var_scenario = max(var_scenario, abs(total_return_shocked))
+    var_scenario = min(var_scenario, 0.95)
 
-    # CVaR paramétrique
-    phi_z = stats.norm.pdf(z)
-    cvar_scenario = var_scenario + vol_over_period * phi_z / (1 - confidence)
-    cvar_scenario = max(0, min(cvar_scenario, 1.0))
+    # CVaR = VaR + 25% buffer (queue épaisse)
+    cvar_scenario = min(var_scenario * 1.25, 0.99)
 
     # Rendement annualisé pour reporting
     ret_stressed_annualized = (1 + total_return_shocked) ** (252 / T) - 1
