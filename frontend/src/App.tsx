@@ -79,7 +79,7 @@ const REGIONS = [
   { code: 'GLOBAL', label: '🌍 Mondial', rf: 0.035 },
 ];
 
-/* ─── Animated Counter Component ────────────────────────── */
+/* ─── Animated Counter ─────────────────────────────────── */
 function AnimatedCounter({ value, decimals = 2, suffix = '' }: { value: number; decimals?: number; suffix?: string }) {
   const [display, setDisplay] = useState(0);
   const ref = useRef(value);
@@ -94,7 +94,7 @@ function AnimatedCounter({ value, decimals = 2, suffix = '' }: { value: number; 
     const animate = (now: number) => {
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out
       const current = start + (end - start) * eased;
       setDisplay(current);
       if (progress < 1) {
@@ -109,6 +109,34 @@ function AnimatedCounter({ value, decimals = 2, suffix = '' }: { value: number; 
   }, [value]);
 
   return <span className="vc-counter">{display.toFixed(decimals)}{suffix}</span>;
+}
+
+/* ─── Skeleton Card ────────────────────────────────────── */
+function SkeletonCards() {
+  return (
+    <div className="vc-skeleton-cards">
+      {[1, 2, 3, 4, 5].map(i => <div key={i} className="vc-skeleton-card" />)}
+    </div>
+  );
+}
+
+/* ─── Empty State ──────────────────────────────────────── */
+function EmptyState({ onGoConfig }: { onGoConfig: () => void }) {
+  return (
+    <div className="vc-empty-state">
+      <div className="vc-empty-icon">◈</div>
+      <div className="vc-empty-title">Aucun résultat pour le moment</div>
+      <div className="vc-empty-desc">Configurez vos actifs et lancez une analyse dans l'onglet Configuration.</div>
+      <button onClick={onGoConfig} className="vc-cta vc-cta-primary" style={{ marginTop: 24, width: 'auto', display: 'inline-block' }}>
+        ▸ Aller à la configuration
+      </button>
+    </div>
+  );
+}
+
+/* ─── Gold Separator ───────────────────────────────────── */
+function GoldSeparator() {
+  return <hr className="vc-separator" />;
 }
 
 export default function App() {
@@ -240,23 +268,24 @@ export default function App() {
   const selectedAssetInfo = selectedAsset && result?.assets_info?.[selectedAsset] ? result.assets_info[selectedAsset] : null;
 
   // Theme-aware chart helpers
-  const gridStroke = isLight ? '#e5e7eb' : '#1e293b';
-  const axisFill = isLight ? '#374151' : '#64748b';
-  const labelFill = isLight ? '#6b7280' : '#475569';
+  const gridStroke = isLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)';
+  const axisFill = isLight ? '#4a4a6a' : '#64748b';
+  const labelFill = isLight ? '#8a8aa0' : '#475569';
   const chartTooltipStyle = {
     background: isLight ? 'rgba(255,255,255,0.98)' : 'rgba(11,15,25,0.96)',
     border: isLight ? '1px solid rgba(0,0,0,0.1)' : '1px solid rgba(201,168,76,0.2)',
-    borderRadius: 8,
+    borderRadius: 12,
+    padding: '12px 16px',
     color: isLight ? '#1a1a2e' : '#e8e8e8',
     fontSize: 12,
-    boxShadow: isLight ? '0 4px 16px rgba(0,0,0,0.08)' : '0 8px 24px rgba(0,0,0,0.4)',
+    boxShadow: isLight ? '0 8px 24px rgba(0,0,0,0.1)' : '0 8px 24px rgba(0,0,0,0.4)',
   };
 
   const navItems = [
-    { key: 'config' as const, label: 'Configuration', icon: '⚙️' },
-    { key: 'results' as const, label: 'Résultats', icon: '📊' },
-    { key: 'risk' as const, label: 'Risque', icon: '🛡️' },
-    { key: 'backtest' as const, label: 'Backtest', icon: '🔄' },
+    { key: 'config' as const, label: 'Configuration', icon: '▸' },
+    { key: 'results' as const, label: 'Résultats', icon: '◆' },
+    { key: 'risk' as const, label: 'Risque', icon: '●' },
+    { key: 'backtest' as const, label: 'Backtest', icon: '◈' },
   ];
 
   return (
@@ -269,11 +298,6 @@ export default function App() {
 
       {/* ─── Sidebar ─────────────────────────────────────── */}
       <aside className={`vc-sidebar ${sidebarOpen ? 'open' : ''}`}>
-        {/* Theme toggle */}
-        <button className="vc-theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title="Basculer mode clair/sombre">
-          {theme === 'dark' ? '☀' : '☾'}
-        </button>
-
         <div className="vc-sidebar-logo">
           <h1>VELOCITY CORE</h1>
           <p>Portfolio Optimization Engine</p>
@@ -291,8 +315,8 @@ export default function App() {
         </nav>
 
         {/* Region in sidebar */}
-        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--vc-sidebar-border)' }}>
-          <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--vc-accent-gold)', marginBottom: 8 }}>Région</div>
+        <div className="vc-sidebar-section">
+          <div className="vc-sidebar-section-title">Région</div>
           <div className="vc-region-bar">
             {REGIONS.map(r => (
               <button key={r.code} onClick={() => setRegion(r.code)} className={`vc-region-btn ${region === r.code ? 'active' : ''}`}>
@@ -302,8 +326,16 @@ export default function App() {
           </div>
         </div>
 
+        {/* Theme toggle at bottom */}
+        <div className="vc-sidebar-bottom">
+          <button className="vc-theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            <span className="toggle-icon">{theme === 'dark' ? '☀' : '☾'}</span>
+            {theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+          </button>
+        </div>
+
         <div className="vc-sidebar-footer">
-          Velocity Core v2.0<br />Black-Litterman · Markowitz · Fama-French
+          Velocity Core v2.0 · Black-Litterman · Markowitz · Fama-French
         </div>
       </aside>
 
@@ -314,13 +346,12 @@ export default function App() {
         {activeTab === 'config' && (
           <div className="vc-page">
             <div className="vc-section-header">
-              <h2>⚙️ Configuration</h2>
+              <h2>Configuration</h2>
               <p>Construisez votre portefeuille, paramétrez l'optimisation et lancez l'analyse.</p>
             </div>
 
             <div className="vc-card">
-              {/* Tickers Section */}
-              <div className="vc-card-title"><span className="title-icon">🏷️</span> Actifs sélectionnés</div>
+              <div className="vc-card-title"><span className="title-icon">▸</span> Actifs sélectionnés</div>
               <div className="vc-chips">
                 {tickers.map(t => (
                   <span key={t} className="vc-chip">
@@ -339,7 +370,7 @@ export default function App() {
 
             {/* Parameters */}
             <div className="vc-card">
-              <div className="vc-card-title"><span className="title-icon">🎛️</span> Paramètres d'optimisation</div>
+              <div className="vc-card-title"><span className="title-icon">◆</span> Paramètres d'optimisation</div>
               <div className="vc-config-grid">
                 <div className="vc-config-group">
                   <div className="vc-config-group-title">Mode</div>
@@ -388,9 +419,9 @@ export default function App() {
 
             {/* BL Views */}
             <div className="vc-card">
-              <div className="vc-card-title"><span className="title-icon">👁️</span> Vues Black-Litterman</div>
+              <div className="vc-card-title"><span className="title-icon">●</span> Vues Black-Litterman</div>
               {views.length === 0 && (
-                <p style={{ fontSize: '0.78rem', color: '#475569', marginBottom: 12 }}>Aucune vue définie. Ajoutez des vues pour exprimer vos convictions.</p>
+                <p style={{ fontSize: '13px', color: 'var(--vc-text-muted)', marginBottom: 12 }}>Aucune vue définie. Ajoutez des vues pour exprimer vos convictions.</p>
               )}
               {views.map((v, i) => (
                 <div key={i} className="vc-views-row">
@@ -440,26 +471,23 @@ export default function App() {
         {loading && (
           <div className="vc-loader no-print">
             <div className="vc-spinner"></div>
-            <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--vc-accent-cyan)' }}>Analyse en cours...</p>
-            <div style={{ width: 240 }}>
-              <div className="vc-skeleton" style={{ width: '80%' }}></div>
-              <div className="vc-skeleton" style={{ width: '60%' }}></div>
-              <div className="vc-skeleton" style={{ width: '90%' }}></div>
-            </div>
+            <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--vc-accent-gold)', marginBottom: 8 }}>Analyse en cours...</p>
+            <SkeletonCards />
           </div>
         )}
 
         {/* ─── RESULTS TAB ────────────────────────────────── */}
         {activeTab === 'results' && result && p && !loading && (
           <div className="vc-page">
-            <div className="vc-section-header">
-              <h2>📊 Résultats</h2>
-              <p>Performance, allocation et évolution du portefeuille optimisé.</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 0 }}>
+              <div className="vc-section-header" style={{ marginBottom: 0, flex: 1 }}>
+                <h2>Résultats</h2>
+                <p>Performance, allocation et évolution du portefeuille optimisé.</p>
+              </div>
+              <button onClick={exportPDF} className="vc-export-btn no-print" title="Exporter PDF">⬙</button>
             </div>
 
-            <div className="flex justify-end mb-4 no-print" style={{ marginBottom: 16 }}>
-              <button onClick={exportPDF} className="vc-export-btn">📄 Exporter PDF</button>
-            </div>
+            <GoldSeparator />
 
             {/* Live Ticker Strip */}
             {Object.keys(quotes).length > 0 && (
@@ -486,13 +514,13 @@ export default function App() {
             {/* KPI Cards */}
             <div className="vc-kpi-grid">
               {[
-                { label: 'Rendement Espéré', value: p.expected_return * 100, decimals: 2, suffix: '%', colorClass: 'kpi-green', icon: '📈', color: '#22c55e' },
-                { label: 'Volatilité', value: p.volatility * 100, decimals: 2, suffix: '%', colorClass: 'kpi-yellow', icon: '📊', color: '#eab308' },
-                { label: 'Ratio de Sharpe', value: p.sharpe, decimals: 3, suffix: '', colorClass: 'kpi-cyan', icon: '⚡', color: '#00d4ff' },
-                { label: 'Beta', value: p.beta, decimals: 3, suffix: '', colorClass: 'kpi-purple', icon: '🎯', color: '#8b5cf6' },
-                { label: 'Alpha (Jensen)', value: p.alpha * 100, decimals: 2, suffix: '%', colorClass: p.alpha >= 0 ? 'kpi-green' : 'kpi-red', icon: p.alpha >= 0 ? '✅' : '❌', color: p.alpha >= 0 ? '#22c55e' : '#ef4444' },
+                { label: 'Rendement Espéré', value: p.expected_return * 100, decimals: 2, suffix: '%', color: '#22c55e', icon: '▸' },
+                { label: 'Volatilité', value: p.volatility * 100, decimals: 2, suffix: '%', color: '#eab308', icon: '◆' },
+                { label: 'Ratio de Sharpe', value: p.sharpe, decimals: 3, suffix: '', color: '#00d4ff', icon: '⚡' },
+                { label: 'Beta', value: p.beta, decimals: 3, suffix: '', color: '#8b5cf6', icon: '●' },
+                { label: 'Alpha (Jensen)', value: p.alpha * 100, decimals: 2, suffix: '%', color: p.alpha >= 0 ? '#22c55e' : '#ef4444', icon: p.alpha >= 0 ? '◈' : '◈' },
               ].map(k => (
-                <div key={k.label} className={`vc-kpi ${k.colorClass}`} style={{ '--vc-glow': k.color + '20' } as any}>
+                <div key={k.label} className="vc-kpi" style={{ '--vc-glow': k.color + '20' } as any}>
                   <span className="vc-kpi-icon">{k.icon}</span>
                   <div className="vc-kpi-label">{k.label}</div>
                   <div className="vc-kpi-value" style={{ color: k.color }}>
@@ -502,27 +530,27 @@ export default function App() {
               ))}
             </div>
 
-            {/* Portfolio Evolution vs Benchmark — with scroll & brush */}
+            <GoldSeparator />
+
+            {/* Portfolio Evolution vs Benchmark */}
             <div className="vc-card">
-              <div className="vc-card-title"><span className="title-icon">📈</span> Évolution vs Benchmark</div>
+              <div className="vc-card-title"><span className="title-icon">▸</span> Évolution vs Benchmark</div>
               <div className="vc-chart-scroll">
                 <div style={{ minWidth: Math.max(600, mergedEvol.length * 2) }}>
                   <ResponsiveContainer width="100%" height={380}>
                     <LineChart data={mergedEvol}>
                       <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                      <XAxis dataKey="Date" tick={{ fill: axisFill, fontSize: 10 }} interval="preserveStartEnd"
-                        label={{ value: 'Date', position: 'bottom', fill: labelFill, fontSize: 10 }} />
-                      <YAxis tick={{ fill: axisFill, fontSize: 10 }}
-                        label={{ value: 'Valeur', angle: -90, position: 'insideLeft', fill: labelFill, fontSize: 10 }} />
+                      <XAxis dataKey="Date" tick={{ fill: axisFill, fontSize: 10 }} interval="preserveStartEnd" />
+                      <YAxis tick={{ fill: axisFill, fontSize: 10 }} />
                       <Tooltip contentStyle={chartTooltipStyle} />
-                      <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
                       <Brush dataKey="Date" height={30} stroke={isLight ? '#b8941f' : '#c9a84c'} fill={isLight ? 'rgba(184,148,31,0.05)' : 'rgba(201,168,76,0.05)'}
                         tickFormatter={(v: string) => v?.slice(0, 7)} />
                       {result.assets.map((a, i) => (
                         <Line key={a} type="monotone" dataKey={a} stroke={COLORS[i % COLORS.length]} strokeWidth={1} dot={false} strokeOpacity={0.35} />
                       ))}
-                      <Line type="monotone" dataKey="Portefeuille" stroke="#00d4ff" strokeWidth={3} dot={false} />
-                      <Line type="monotone" dataKey="Benchmark" stroke="#ffffff" strokeWidth={2} strokeDasharray="8 4" dot={false} />
+                      <Line type="monotone" dataKey="Portefeuille" stroke={isLight ? '#b8941f' : '#c9a84c'} strokeWidth={3} dot={false} />
+                      <Line type="monotone" dataKey="Benchmark" stroke={isLight ? '#4a4a6a' : '#94a3b8'} strokeWidth={2} strokeDasharray="8 4" dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -531,7 +559,7 @@ export default function App() {
 
             {/* Efficient Frontier */}
             <div className="vc-card">
-              <div className="vc-card-title"><span className="title-icon">🎯</span> Frontière Efficiente</div>
+              <div className="vc-card-title"><span className="title-icon">◆</span> Frontière Efficiente</div>
               <div className="vc-chart">
                 <ResponsiveContainer width="100%" height={350}>
                   <ScatterChart>
@@ -542,8 +570,8 @@ export default function App() {
                       label={{ value: 'Rendement (%)', angle: -90, position: 'insideLeft', fill: labelFill, fontSize: 10 }} />
                     <Tooltip contentStyle={chartTooltipStyle}
                       formatter={(value: any, name: any) => [Number(value).toFixed(2) + '%', name]} />
-                    <Legend />
-                    <Scatter data={efData} fill="#00d4ff" name="Frontière" />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Scatter data={efData} fill={isLight ? '#b8941f' : '#c9a84c'} name="Frontière" />
                     {p && efData.length > 0 && (
                       <Scatter data={[{ vol: p.volatility * 100, ret: p.expected_return * 100 }]} fill="#22c55e" name="Portefeuille optimal" />
                     )}
@@ -552,24 +580,26 @@ export default function App() {
               </div>
             </div>
 
+            <GoldSeparator />
+
             {/* Weights */}
             <div className="vc-card">
-              <div className="vc-card-title"><span className="title-icon">⚖️</span> Poids Optimaux</div>
+              <div className="vc-card-title"><span className="title-icon">●</span> Poids Optimaux</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {result.assets.map((a, i) => {
                   const w = (result.weights[a] || 0) * 100;
                   const q = quotes[a];
                   const rc = (result.risk_contribution?.[a] || 0) * 100;
+                  const isNarrow = w < 15;
                   return (
                     <div key={a} className="vc-weight-row" onClick={() => setSelectedAsset(a)}>
                       <div className="vc-weight-label" style={{ color: COLORS[i % COLORS.length] }}>{a}</div>
                       <div className="vc-weight-bar-bg">
-                        <div className="vc-weight-bar-fill"
-                          style={{ width: `${w}%`, background: `linear-gradient(90deg, ${COLORS[i % COLORS.length]}33, ${COLORS[i % COLORS.length]})`, minWidth: w > 0 ? '30px' : '0' }}>
+                        <div className={`vc-weight-bar-fill ${isNarrow ? 'vc-bar-narrow' : ''}`}
+                          style={{ width: `${Math.max(w, 2)}%`, background: `linear-gradient(90deg, ${COLORS[i % COLORS.length]}44, ${COLORS[i % COLORS.length]})` }}>
                           <span>{w.toFixed(1)}%</span>
                         </div>
                       </div>
-                      {/* Tooltip on hover */}
                       <div className="vc-weight-tooltip">
                         <strong>{a}</strong> — Poids: {w.toFixed(2)}%<br />
                         Contribution risque: {rc.toFixed(2)}%
@@ -579,7 +609,7 @@ export default function App() {
                   );
                 })}
               </div>
-              <p style={{ fontSize: '0.68rem', color: '#475569', marginTop: 12 }}>Cliquez sur un ticker pour les détails</p>
+              <p style={{ fontSize: '12px', color: 'var(--vc-text-muted)', marginTop: 12 }}>Cliquez sur un ticker pour les détails</p>
             </div>
 
             {/* Asset Modal */}
@@ -591,7 +621,7 @@ export default function App() {
                     <button className="vc-modal-close" onClick={() => setSelectedAsset(null)}>✕</button>
                   </div>
                   <div className="vc-modal-row"><span className="label">Prix</span><span className="value">{formatPrice(selectedAssetInfo.price, selectedAssetInfo.currency)}</span></div>
-                  <div className="vc-modal-row"><span className="label">Change</span><span className="value" style={{ color: selectedAssetInfo.change_percent >= 0 ? '#22c55e' : '#ef4444' }}>{selectedAssetInfo.change_percent >= 0 ? '+' : ''}{selectedAssetInfo.change_percent.toFixed(2)}%</span></div>
+                  <div className="vc-modal-row"><span className="label">Change</span><span className="value" style={{ color: selectedAssetInfo.change_percent >= 0 ? '#22c55e' : '#dc2626' }}>{selectedAssetInfo.change_percent >= 0 ? '+' : ''}{selectedAssetInfo.change_percent.toFixed(2)}%</span></div>
                   <div className="vc-modal-row"><span className="label">P/E Ratio</span><span className="value">{selectedAssetInfo.pe_ratio != null ? selectedAssetInfo.pe_ratio.toFixed(1) : 'N/A'}</span></div>
                   <div className="vc-modal-row"><span className="label">Dividend Yield</span><span className="value">{selectedAssetInfo.dividend_yield ? (selectedAssetInfo.dividend_yield * 100).toFixed(2) + '%' : 'N/A'}</span></div>
                   <div className="vc-modal-row"><span className="label">Market Cap</span><span className="value">{selectedAssetInfo.mcap ? formatMcap(selectedAssetInfo.mcap) : 'N/A'}</span></div>
@@ -602,7 +632,7 @@ export default function App() {
             {/* Correlation Matrix */}
             {result.correlation_matrix && result.correlation_matrix.length > 0 && (
               <div className="vc-card">
-                <div className="vc-card-title"><span className="title-icon">🔢</span> Matrice de Corrélation</div>
+                <div className="vc-card-title"><span className="title-icon">◈</span> Matrice de Corrélation</div>
                 <div style={{ overflowX: 'auto' }}>
                   <table className="vc-corr-table">
                     <thead>
@@ -614,7 +644,7 @@ export default function App() {
                     <tbody>
                       {result.correlation_matrix.map((row, i) => (
                         <tr key={i}>
-                          <td style={{ fontWeight: 700, color: '#64748b' }}>{corrLabels[i]}</td>
+                          <td style={{ fontWeight: 700, color: 'var(--vc-text-muted)' }}>{corrLabels[i]}</td>
                           {row.map((v, j) => {
                             const abs = Math.abs(v);
                             const bg = i === j ? 'var(--vc-corr-self-bg)' : v > 0 ? `rgba(0,212,255,${abs * 0.2})` : `rgba(239,68,68,${abs * 0.2})`;
@@ -631,14 +661,14 @@ export default function App() {
             {/* Fama-French */}
             {ffData.length > 0 && (
               <div className="vc-card">
-                <div className="vc-card-title"><span className="title-icon">🧬</span> Exposition Fama-French 5 Facteurs</div>
+                <div className="vc-card-title"><span className="title-icon">◆</span> Exposition Fama-French 5 Facteurs</div>
                 <div className="vc-chart">
                   <ResponsiveContainer width="100%" height={300}>
                     <RadarChart data={ffData}>
                       <PolarGrid stroke={gridStroke} />
                       <PolarAngleAxis dataKey="factor" tick={{ fill: axisFill, fontSize: 11 }} />
                       <PolarRadiusAxis tick={{ fill: labelFill, fontSize: 9 }} />
-                      <Radar name="Exposition" dataKey="exposure" stroke="#00d4ff" fill="#00d4ff" fillOpacity={0.15} strokeWidth={2} />
+                      <Radar name="Exposition" dataKey="exposure" stroke={isLight ? '#b8941f' : '#00d4ff'} fill={isLight ? '#b8941f' : '#00d4ff'} fillOpacity={0.15} strokeWidth={2} />
                       <Tooltip contentStyle={chartTooltipStyle} />
                     </RadarChart>
                   </ResponsiveContainer>
@@ -646,9 +676,11 @@ export default function App() {
               </div>
             )}
 
+            <GoldSeparator />
+
             {/* Footer */}
             <div className="vc-footer no-print">
-              <div className="vc-footer-line1">Velocity Core v2.0 — Karl BAUJON</div>
+              <div className="vc-footer-line1">Velocity Core · Karl BAUJON</div>
               <div className="vc-footer-line2">Black-Litterman · Markowitz · Fama-French · VaR/CVaR · Walk-Forward</div>
             </div>
           </div>
@@ -658,12 +690,14 @@ export default function App() {
         {activeTab === 'risk' && result && p && !loading && (
           <div className="vc-page">
             <div className="vc-section-header">
-              <h2>🛡️ Analyse de Risque</h2>
+              <h2>Analyse de Risque</h2>
               <p>VaR, CVaR et métriques de risque avancées.</p>
             </div>
 
+            <GoldSeparator />
+
             <div className="vc-card">
-              <div className="vc-card-title danger"><span className="title-icon">⚠️</span> VaR & CVaR</div>
+              <div className="vc-card-title danger"><span className="title-icon">●</span> VaR & CVaR</div>
               <div className="vc-risk-grid">
                 {[
                   { label: 'VaR Paramétrique 99%', value: p.var_99_pct },
@@ -689,7 +723,7 @@ export default function App() {
             {/* Risk contribution */}
             {result.risk_contribution && (
               <div className="vc-card">
-                <div className="vc-card-title"><span className="title-icon">📐</span> Contribution au Risque</div>
+                <div className="vc-card-title"><span className="title-icon">▸</span> Contribution au Risque</div>
                 <div className="vc-chart">
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={result.assets.map(a => ({
@@ -697,10 +731,9 @@ export default function App() {
                       contribution: (result.risk_contribution[a] || 0) * 100
                     }))} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                      <XAxis type="number" tick={{ fill: axisFill, fontSize: 10 }} unit="%"
-                        label={{ value: 'Contribution (%)', position: 'bottom', fill: labelFill, fontSize: 10 }} />
-                      <YAxis type="category" dataKey="name" tick={{ fill: isLight ? '#374151' : '#94a3b8', fontSize: 11 }} width={70} />
-                      <Tooltip contentStyle={chartTooltipStyle} formatter={(v: any) => [Number(v).toFixed(2) + '%', 'Concession']} />
+                      <XAxis type="number" tick={{ fill: axisFill, fontSize: 10 }} unit="%" />
+                      <YAxis type="category" dataKey="name" tick={{ fill: axisFill, fontSize: 11 }} width={70} />
+                      <Tooltip contentStyle={chartTooltipStyle} formatter={(v: any) => [Number(v).toFixed(2) + '%', 'Contribution']} />
                       <Bar dataKey="contribution" name="Contribution Risque" radius={[0, 6, 6, 0]}>
                         {result.assets.map((_: any, i: number) => (
                           <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -712,8 +745,10 @@ export default function App() {
               </div>
             )}
 
+            <GoldSeparator />
+
             <div className="vc-footer no-print">
-              <div className="vc-footer-line1">Velocity Core v2.0 — Karl BAUJON</div>
+              <div className="vc-footer-line1">Velocity Core · Karl BAUJON</div>
               <div className="vc-footer-line2">Analyse de risque quantitatif</div>
             </div>
           </div>
@@ -723,21 +758,23 @@ export default function App() {
         {activeTab === 'backtest' && result && p && !loading && (
           <div className="vc-page">
             <div className="vc-section-header">
-              <h2>🔄 Walk-Forward Backtest</h2>
+              <h2>Walk-Forward Backtest</h2>
               <p>Validation hors-échantillon par fenêtres glissantes.</p>
             </div>
+
+            <GoldSeparator />
 
             {wfResults.length > 0 ? (
               <>
                 <div className="vc-kpi-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
                   {[
-                    { label: 'Rendement Moyen', value: result.walk_forward_backtest.summary.avg_return * 100, suffix: '%', color: '#22c55e', colorClass: 'kpi-green', icon: '📈' },
-                    { label: 'Volatilité Moyenne', value: result.walk_forward_backtest.summary.avg_volatility * 100, suffix: '%', color: '#eab308', colorClass: 'kpi-yellow', icon: '📊' },
-                    { label: 'Sharpe Moyen', value: result.walk_forward_backtest.summary.avg_sharpe, suffix: '', color: '#00d4ff', colorClass: 'kpi-cyan', icon: '⚡' },
-                    { label: 'VaR 99% Moyen', value: result.walk_forward_backtest.summary.avg_var_99 * 100, suffix: '%', color: '#ef4444', colorClass: 'kpi-red', icon: '⚠️' },
-                    { label: 'Max Drawdown', value: result.walk_forward_backtest.summary.max_drawdown * 100, suffix: '%', color: '#ef4444', colorClass: 'kpi-red', icon: '📉' },
+                    { label: 'Rendement Moyen', value: result.walk_forward_backtest.summary.avg_return * 100, suffix: '%', color: '#22c55e', icon: '▸' },
+                    { label: 'Volatilité Moyenne', value: result.walk_forward_backtest.summary.avg_volatility * 100, suffix: '%', color: '#eab308', icon: '◆' },
+                    { label: 'Sharpe Moyen', value: result.walk_forward_backtest.summary.avg_sharpe, suffix: '', color: '#00d4ff', icon: '⚡' },
+                    { label: 'VaR 99% Moyen', value: result.walk_forward_backtest.summary.avg_var_99 * 100, suffix: '%', color: '#ef4444', icon: '●' },
+                    { label: 'Max Drawdown', value: result.walk_forward_backtest.summary.max_drawdown * 100, suffix: '%', color: '#ef4444', icon: '◈' },
                   ].map(s => (
-                    <div key={s.label} className={`vc-kpi ${s.colorClass}`} style={{ '--vc-glow': s.color + '20' } as any}>
+                    <div key={s.label} className="vc-kpi" style={{ '--vc-glow': s.color + '20' } as any}>
                       <span className="vc-kpi-icon">{s.icon}</span>
                       <div className="vc-kpi-label">{s.label}</div>
                       <div className="vc-kpi-value" style={{ color: s.color }}>
@@ -748,7 +785,7 @@ export default function App() {
                 </div>
 
                 <div className="vc-card">
-                  <div className="vc-card-title"><span className="title-icon">📊</span> Rendement par période</div>
+                  <div className="vc-card-title"><span className="title-icon">◆</span> Rendement par période</div>
                   <div className="vc-chart">
                     <ResponsiveContainer width="100%" height={280}>
                       <BarChart data={wfResults.map((r: any) => ({
@@ -757,10 +794,8 @@ export default function App() {
                         sharpe: r.sharpe
                       }))}>
                         <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                        <XAxis dataKey="period" tick={{ fill: axisFill, fontSize: 9 }}
-                          label={{ value: 'Période', position: 'bottom', fill: labelFill, fontSize: 10 }} />
-                        <YAxis tick={{ fill: axisFill, fontSize: 10 }}
-                          label={{ value: 'Rendement (%)', angle: -90, position: 'insideLeft', fill: labelFill, fontSize: 10 }} />
+                        <XAxis dataKey="period" tick={{ fill: axisFill, fontSize: 9 }} />
+                        <YAxis tick={{ fill: axisFill, fontSize: 10 }} />
                         <Tooltip contentStyle={chartTooltipStyle}
                           formatter={(v: any) => [Number(v).toFixed(2) + '%', 'Rendement']} />
                         <Bar dataKey="return" name="Rendement %" radius={[6, 6, 0, 0]}>
@@ -775,12 +810,14 @@ export default function App() {
               </>
             ) : (
               <div className="vc-card">
-                <p style={{ color: '#475569', fontSize: '0.85rem' }}>Aucun résultat de backtest disponible. Lancez une analyse d'abord.</p>
+                <p style={{ color: 'var(--vc-text-muted)', fontSize: '13px' }}>Aucun résultat de backtest disponible. Lancez une analyse d'abord.</p>
               </div>
             )}
 
+            <GoldSeparator />
+
             <div className="vc-footer no-print">
-              <div className="vc-footer-line1">Velocity Core v2.0 — Karl BAUJON</div>
+              <div className="vc-footer-line1">Velocity Core · Karl BAUJON</div>
               <div className="vc-footer-line2">Walk-Forward Out-of-Sample Validation</div>
             </div>
           </div>
@@ -788,13 +825,8 @@ export default function App() {
 
         {/* Empty state for results/risk/backtest when no data */}
         {['results', 'risk', 'backtest'].includes(activeTab) && !result && !loading && (
-          <div className="vc-page" style={{ textAlign: 'center', paddingTop: 80 }}>
-            <p style={{ fontSize: '2rem', marginBottom: 12 }}>📊</p>
-            <p style={{ fontSize: '1rem', fontWeight: 600, color: '#94a3b8' }}>Aucun résultat pour le moment</p>
-            <p style={{ fontSize: '0.82rem', color: '#475569', marginTop: 8 }}>Configurez vos actifs et lancez une analyse dans l'onglet Configuration.</p>
-            <button onClick={() => setActiveTab('config')} className="vc-cta vc-cta-primary" style={{ marginTop: 24, width: 'auto', display: 'inline-block' }}>
-              ⚙️ Aller à la configuration
-            </button>
+          <div className="vc-page">
+            <EmptyState onGoConfig={() => setActiveTab('config')} />
           </div>
         )}
 
